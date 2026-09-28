@@ -51,6 +51,7 @@ export function tone(freq, dur = 0.12, type = "sine", vol = 0.2, slide = 0) {
 }
 
 export const sfx = {
+  tap: () => tone(900, 0.045, "triangle", 0.09),
   star: () => { tone(880, 0.1, "triangle"); setTimeout(() => tone(1320, 0.15, "triangle"), 70); },
   pop: (pitch = 1) => tone(500 * pitch, 0.09, "sine", 0.25, 600 * pitch),
   bonk: () => tone(220, 0.3, "square", 0.15, -140),

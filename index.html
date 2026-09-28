@@ -22,12 +22,27 @@
 
   <!-- In-game HUD -->
   <div id="hud" class="hidden">
-    <div class="pill" id="hudScore">⭐ 0</div>
-    <div class="pill" id="hudTime">⏱ 60</div>
-    <div class="hud-right">
-      <button class="icon-btn" id="fullBtn" title="Fullscreen" aria-label="Fullscreen">⛶</button>
-      <button class="icon-btn" id="muteBtn" title="Sound on/off" aria-label="Sound on/off">🔊</button>
-      <button class="icon-btn" id="quitBtn" title="Stop game" aria-label="Stop game">⏹</button>
+    <div class="time-bar" aria-hidden="true"><span id="hudTimeBar"></span></div>
+    <div class="hud-row">
+      <div class="pill" aria-label="Score">⭐ <b id="hudScore">0</b></div>
+      <div class="pill" id="hudTimeChip" aria-label="Seconds left">⏱ <b id="hudTime">60</b></div>
+      <div class="hud-right">
+        <button class="icon-btn" id="pauseBtn" title="Pause" aria-label="Pause">⏸</button>
+        <button class="icon-btn" id="fullBtn" title="Fullscreen" aria-label="Fullscreen">⛶</button>
+        <button class="icon-btn" id="muteBtn" title="Sound on/off" aria-label="Sound on/off">🔊</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause menu -->
+  <div id="pause" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
+    <div class="panel small">
+      <h2 id="pauseTitle">⏸ Paused</h2>
+      <div class="col">
+        <button class="btn" id="resumeBtn">▶ Keep playing</button>
+        <button class="btn ghost" id="restartBtn">🔁 Start over</button>
+        <button class="btn ghost" id="quitBtn">⏹ End game</button>
+      </div>
     </div>
   </div>
 
@@ -62,11 +77,13 @@
       <div class="setup-emoji" id="setupEmoji"></div>
       <h2 id="setupTitle"></h2>
       <div class="how" id="setupHow"></div>
+      <p class="setup-info" id="setupInfo"></p>
       <div class="levels">
         <button class="level easy"   data-level="easy"><span>🐣</span>Easy</button>
         <button class="level medium" data-level="medium"><span>🐯</span>Medium</button>
         <button class="level hard"   data-level="hard"><span>🦖</span>Hard</button>
       </div>
+      <p class="setup-best" id="setupBest"></p>
       <p class="footnote">🧍 Make room to move, and stand back so the camera sees your hands.</p>
       <p class="footnote rotate-tip">📱 Tip: turn your phone sideways and lean it against something.</p>
     </div>
@@ -90,7 +107,9 @@
   <section id="end" class="screen hidden">
     <div class="panel">
       <h2 id="endTitle">Great workout!</h2>
+      <div class="stars-row" id="endStars" role="img" aria-label="Stars"></div>
       <div class="score-big" id="endScore">0</div>
+      <p class="record" id="endRecord"></p>
       <div class="stats" id="endStats"></div>
       <p class="cheer" id="endCheer"></p>
       <div class="row">

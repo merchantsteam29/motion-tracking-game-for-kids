@@ -1,6 +1,7 @@
 // High Knees Race: run in place, lifting your knees high, to race an animal to the finish.
 import { view, ctx, sfx, say, tone, popup, burst, drawEmoji, bigText, drawPlayer } from "../fx.js";
 import { player } from "../tracker.js";
+import { body } from "../profile.js";
 
 export default {
   id: "knees",
@@ -13,6 +14,14 @@ export default {
     ["🔁", "Left, right, left, right!"],
     ["🏁", "Beat the animal to the finish"],
   ],
+  finger: [
+    ["👈", "Tap the left side"],
+    ["👉", "Then the right side"],
+    ["🏁", "Faster taps = faster runner"],
+  ],
+  fingerTip: "👆 Tap left, right, left, right!",
+  stars: [40, 80, 120], // scores for 1, 2, 3 stars per minute of play
+  legs: true, // needs the camera to see legs
   mouse: "head", // each click lifts the next knee
   levels: {
     // lift = how high the knee must come up (shoulder-widths), rival = rival speed (steps per second)
@@ -20,7 +29,7 @@ export default {
     medium: { time: 75, lift: 0.4,  track: 40, rival: 1.9, rivalEmoji: "🐶" },
     hard:   { time: 90, lift: 0.5,  track: 50, rival: 2.5, rivalEmoji: "🐆" },
   },
-  create: (cfg) => new HighKnees(cfg),
+  create: (cfg) => new HighKnees({ ...cfg, lift: cfg.lift * body.legs }),
 };
 
 class HighKnees {
@@ -116,7 +125,8 @@ class HighKnees {
     const { W, H } = view;
     drawPlayer(player, now);
 
-    const cue = !this.legsSeen ? ["🦵 Step back so I can see your knees!", "#ffb3c1"]
+    const cue = player.finger && this.pause <= 0 ? ["👆 Tap left, right, left, right!", "#ffe066"]
+      : !this.legsSeen ? ["🦵 Step back so I can see your knees!", "#ffb3c1"]
       : this.pause > 0 ? [this.races ? "Get ready…" : "Run in place to race!", "#fff"]
       : ["🦵 High knees! Go go go!", "#ffe066"];
     bigText(cue[0], W / 2, 110, Math.min(52, W / 14), cue[1]);

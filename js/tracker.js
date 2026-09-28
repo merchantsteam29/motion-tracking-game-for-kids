@@ -428,15 +428,22 @@ function detect(nowMs) {
   t1.update(hB, t, s);
 }
 
-// ---------- Mouse fallback ("head" = mouse moves you, "hand" = mouse is your hand) ----------
+// ---------- Finger mode / mouse ("head" = pointer moves you, "hand" = each finger is a hand) ----------
 export function updateFromMouse(m, style, dt) {
   const s = Math.min(view.W, view.H) * 0.18;
   player.scale = s;
   const [h0, h1] = player.hands;
   if (style === "hand") {
     player.head.set(view.W / 2, view.H * 0.55);
-    h1.set(m.x, m.y);
-    h0.ok = false;
+    if (m.touch) {
+      // Touch: up to two fingers, and a hand only exists while its finger is down.
+      const pts = [...m.pointers.values()];
+      if (pts[0]) h1.set(pts[0].x, pts[0].y); else h1.ok = false;
+      if (pts[1]) h0.set(pts[1].x, pts[1].y); else h0.ok = false;
+    } else {
+      h1.set(m.x, m.y);
+      h0.ok = false;
+    }
   } else {
     player.head.set(m.x, m.y);
     if (m.down) { h0.set(m.x - s * 0.45, m.y - s); h1.set(m.x + s * 0.45, m.y - s); }

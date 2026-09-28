@@ -53,10 +53,16 @@ The website is published automatically to GitHub Pages by `.github/workflows/pag
 Opening `index.html` by double-clicking won't work, because browsers only allow the camera on `localhost` or `https` pages.
 
 ### Settings (⚙️ on the menu)
-Saved on each device: sound effects, talking voice, volume, hand circles (Steady / Normal / Quick),
-camera choice, mirror picture, show camera picture, game length (Short / Normal / Long),
-calm mode (no shaking, fewer sparkles), play without camera (touch/mouse), and tracking info
-(red dots show what the camera sees; **D** also toggles it on a keyboard).
+Saved on each device:
+- **🧒 Age**: uses average height and body proportions for that age, so targets, squats, knee lifts
+  and jumping-jack feet fit the player; shows how far back to stand and recommends a level
+- **👆 Finger mode**: play every game by touching the screen, no camera (two fingers = two hands)
+- Game length, calm mode, sound effects, talking voice, volume, hand circles (Steady / Normal / Quick),
+  camera choice, mirror picture, show camera picture, tracking info (**D** also toggles it)
+
+### Results
+Each round earns 1–3 ⭐ and saves a personal best per game and level ("🏆 New record!").
+Pause any time with ⏸ (or **P** / **Esc**); switching apps pauses automatically.
 
 ### Code layout
 - `js/main.js` – menu, round flow (ready → countdown → play → results), HUD
@@ -64,4 +70,6 @@ calm mode (no shaking, fewer sparkles), play without camera (touch/mouse), and t
 - `electron/` – Windows app wrapper and icon; `scripts/` – offline file prep and icon generator
 - `js/fx.js` – drawing, sounds, voice, particles
 - `js/settings.js` / `js/settings-ui.js` – saved settings and the Settings screen
+- `js/profile.js` – age → average height, body proportions, stand distance
+- `js/progress.js` – star ratings and personal bests
 - `js/games/*.js` – one file per game; add a new game by copying one and listing it in `main.js`

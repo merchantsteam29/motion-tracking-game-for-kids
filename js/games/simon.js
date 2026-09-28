@@ -1,6 +1,7 @@
 // Simon Says: copy the pose — but only when Simon says so!
 import { view, ctx, sfx, say, popup, bigText, drawPlayer, progressBar, pick } from "../fx.js";
 import { player } from "../tracker.js";
+import { body } from "../profile.js";
 
 // Arm shapes for the picture: [elbow, hand] for the screen-right arm, in body units
 // (shoulder half-width = 0.5). The screen-left arm mirrors it unless `left` is given.
@@ -56,13 +57,20 @@ export default {
     ["⏳", "Hold still till the bar fills"],
     ["🙊", "Only if Simon says!"],
   ],
+  finger: [
+    ["👂", "Listen to Simon"],
+    ["👆", "Tap the matching picture"],
+    ["🙊", "Only if Simon says!"],
+  ],
+  fingerTip: "👆 Tap the picture Simon says",
+  stars: [20, 40, 60], // scores for 1, 2, 3 stars per minute of play
   mouse: "head", // mouse button = hands up, move mouse low = squat
   levels: {
     easy:   { time: 60, window: 6.0, hold: 0.6, trick: 0,    depth: 0.5, flex: false },
     medium: { time: 75, window: 4.5, hold: 0.6, trick: 0.2,  depth: 0.7, flex: true },
     hard:   { time: 90, window: 3.2, hold: 0.7, trick: 0.3,  depth: 0.9, flex: true },
   },
-  create: (cfg) => new Simon(cfg),
+  create: (cfg) => new Simon({ ...cfg, depth: cfg.depth * body.legs }),
 };
 
 class Simon {
@@ -84,7 +92,10 @@ class Simon {
     do pose = pick(this.poses); while (pose === this.last);
     this.last = pose;
     const says = Math.random() >= this.cfg.trick;
-    this.cmd = { pose, says, t: 0, hold: 0 };
+    // Finger mode: three pictures to tap, one of them right.
+    const others = this.poses.filter((p) => p !== pose).sort(() => Math.random() - 0.5).slice(0, 2);
+    const choices = [pose, ...others].sort(() => Math.random() - 0.5);
+    this.cmd = { pose, says, t: 0, hold: 0, choices };
     this.total++;
     const words = pose.name.replace("!", "");
     say(says ? `Simon says, ${words}!` : `${words}!`);
@@ -110,7 +121,7 @@ class Simon {
       head: player.head, a: player.hands[0], b: player.hands[1], s: player.scale,
       cx: player.cx, shY: player.shY, baseY: player.baseY, depth: this.cfg.depth,
     };
-    c.hold = c.pose.check(P) ? c.hold + dt : Math.max(0, c.hold - dt * 2);
+    if (!player.finger) c.hold = c.pose.check(P) ? c.hold + dt : Math.max(0, c.hold - dt * 2);
 
     if (c.hold >= this.cfg.hold) {
       if (c.says) { this.matched++; this.score += 10; this.finish("Yes! ✅ +10", true); }
@@ -121,9 +132,27 @@ class Simon {
     }
   }
 
+  // Finger mode: the three picture buttons.
+  choiceRects() {
+    const { W, H } = view, n = this.cmd.choices.length;
+    const bw = Math.min(190, (W - 60) / n), bh = bw * 1.25, gap = 14;
+    const x0 = W / 2 - (n * bw + (n - 1) * gap) / 2, y = Math.max(90, H * 0.42 - bh / 2);
+    return this.cmd.choices.map((pose, i) => ({ pose, x: x0 + i * (bw + gap), y, w: bw, h: bh }));
+  }
+
+  onTap(x, y) {
+    if (!player.finger || !this.cmd) return;
+    const hit = this.choiceRects().find((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
+    if (!hit) return;
+    const c = this.cmd;
+    if (!c.says) this.finish("Simon didn't say! 🙊", false);
+    else if (hit.pose === c.pose) { this.matched++; this.score += 10; this.finish("Yes! ✅ +10", true); }
+    else this.finish("Not that one! 🙈", false);
+  }
+
   draw(now) {
     const { W, H } = view;
-    drawPlayer(player, now);
+    if (!player.finger) drawPlayer(player, now);
 
     if (!this.cmd) {
       bigText(this.restText, W / 2, H - 70, Math.min(48, W / 14));
@@ -131,11 +160,24 @@ class Simon {
     }
     const c = this.cmd;
 
-    // Picture card (top-left, under the HUD).
-    const cw = Math.min(240, W * 0.36), ch = cw * 1.35, x0 = 12, y0 = 76;
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
-    ctx.beginPath(); ctx.roundRect(x0, y0, cw, ch, 22); ctx.fill();
-    drawFigure(x0 + cw / 2, y0 + ch * 0.4, cw * 0.2, c.pose);
+    if (player.finger) {
+      for (const r of this.choiceRects()) {
+        ctx.fillStyle = "rgba(255,255,255,0.92)";
+        ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 22); ctx.fill();
+        drawFigure(r.x + r.w / 2, r.y + r.h * 0.36, r.w * 0.16, r.pose);
+        ctx.font = `800 ${Math.round(r.w * 0.1)}px "Baloo Local", "Baloo 2", sans-serif`;
+        ctx.fillStyle = "#2a1b5c";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(r.pose.emoji + " " + r.pose.name.replace("!", ""), r.x + r.w / 2, r.y + r.h - 22, r.w - 12);
+      }
+    } else {
+      // Picture card (top-left, under the HUD).
+      const cw = Math.min(240, W * 0.36), ch = cw * 1.35, x0 = 12, y0 = 76;
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.beginPath(); ctx.roundRect(x0, y0, cw, ch, 22); ctx.fill();
+      drawFigure(x0 + cw / 2, y0 + ch * 0.4, cw * 0.2, c.pose);
+    }
 
     // Command text.
     const size = Math.min(56, W / 13);
@@ -143,7 +185,7 @@ class Simon {
     bigText(`${c.pose.emoji} ${c.pose.name}`, W / 2, H - 95, size, "#fff");
 
     const bw = Math.min(420, W * 0.8);
-    progressBar(W / 2 - bw / 2, H - 50, bw, 22, c.hold / this.cfg.hold, "#ffe066");
+    if (!player.finger) progressBar(W / 2 - bw / 2, H - 50, bw, 22, c.hold / this.cfg.hold, "#ffe066");
     progressBar(W / 2 - bw / 2, H - 22, bw, 8, 1 - c.t / this.cfg.window, "#ff8fa3");
   }
 

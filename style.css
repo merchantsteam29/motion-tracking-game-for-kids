@@ -513,3 +513,131 @@ body.page {
 }
 /* Keep the title clear of the ⚙️ button on narrow phones */
 @media (max-width: 480px) { #menu { padding-top: 86px; } }
+
+/* ---------- In-game HUD (v1.4) ---------- */
+#hud { display: block; }
+.hud-row { display: flex; gap: 10px; align-items: center; }
+.pill b { font-variant-numeric: tabular-nums; }
+.time-bar {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.time-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #2fcf8a, #ffd84d);
+  transform-origin: left;
+  transition: transform 0.25s linear;
+}
+#hudTimeChip.low { background: rgba(255, 92, 122, 0.9); border-color: transparent; animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.08); } }
+
+/* ---------- Pause ---------- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(15, 10, 42, 0.35);
+}
+.col { display: flex; flex-direction: column; gap: 4px; margin-top: 14px; }
+.col .btn { margin: 4px 0; }
+
+/* ---------- Setup extras ---------- */
+.setup-info { margin: 0; font-size: 17px; font-weight: 700; color: #ffe066; }
+.setup-best { margin: 0; font-size: 16px; color: var(--muted); min-height: 1em; }
+.mini-stars i, .tile-stars i { font-style: normal; color: rgba(255, 255, 255, 0.25); }
+.mini-stars i.on, .tile-stars i.on { color: #ffd84d; }
+.level { position: relative; }
+.level.recommended { box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25), 0 0 0 4px #ffd84d; }
+.level.recommended::after {
+  content: "👍 For your age";
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: #ffd84d;
+  color: #2a1b5c;
+  font-size: 13px;
+}
+.tile-stars { font-size: 18px; letter-spacing: 2px; min-height: 1em; }
+
+/* ---------- Results ---------- */
+.stars-row { display: flex; justify-content: center; gap: 10px; margin-top: 10px; }
+.star { font-size: 64px; line-height: 1; color: rgba(255, 255, 255, 0.18); }
+.star.on { color: #ffd84d; text-shadow: 0 0 24px rgba(255, 216, 77, 0.7); animation: star-pop 0.5s cubic-bezier(0.3, 1.8, 0.5, 1) both; animation-delay: var(--d); }
+@keyframes star-pop { from { transform: scale(0) rotate(-40deg); opacity: 0; } }
+.record { margin: -6px 0 10px; font-size: 18px; font-weight: 700; color: var(--muted); }
+.record.new { color: #ffd84d; font-size: 22px; animation: glow 1.2s ease-in-out infinite alternate; }
+@keyframes glow { to { text-shadow: 0 0 18px rgba(255, 216, 77, 0.8); transform: scale(1.04); } }
+
+/* ---------- Age stepper ---------- */
+.stepper { flex: none; display: inline-flex; align-items: center; gap: 6px; }
+.stepper button {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  background: var(--glass-hi);
+  font-size: 24px;
+  font-weight: 800;
+}
+.stepper output { min-width: 74px; text-align: center; font-size: 22px; font-weight: 800; }
+
+/* ---------- Fun & alive: motion ---------- */
+.screen:not(.hidden) > *, .overlay:not(.hidden) > * { animation: rise 0.35s ease-out both; }
+@keyframes rise { from { opacity: 0; transform: translateY(16px) scale(0.98); } }
+.game-tile { animation: tile-in 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) both; animation-delay: calc(var(--i, 0) * 45ms); }
+@keyframes tile-in { from { opacity: 0; transform: scale(0.6) translateY(20px); } }
+.game-tile:hover span, .game-tile:focus-visible span { animation: wiggle 0.5s ease-in-out; }
+@keyframes wiggle { 30% { transform: rotate(-12deg) scale(1.15); } 70% { transform: rotate(10deg) scale(1.15); } }
+.setup-emoji { animation: float 2.4s ease-in-out infinite; }
+@keyframes float { 50% { transform: translateY(-8px); } }
+.btn:active, .icon-btn:active, .gear:active, .back:active, .stepper button:active, .switch:active { transform: scale(0.92); }
+.btn, .icon-btn, .gear, .back { transition: transform 0.1s, filter 0.15s; }
+
+/* Calm mode and "reduce motion" turn the animations off. */
+body.calm *, body.calm *::before, body.calm *::after { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+@media (max-width: 480px) {
+  .star { font-size: 48px; }
+  .stepper output { min-width: 56px; font-size: 20px; }
+  .setup-info { font-size: 14px; }
+  .level.recommended::after { font-size: 11px; top: -12px; }
+}
+/* Results fit on a sideways phone without scrolling */
+@media (max-height: 500px) {
+  #end .panel { padding: 12px 18px; }
+  #end h2 { font-size: 24px; }
+  .star { font-size: 34px; }
+  .stars-row { margin-top: 2px; }
+  #end .score-big { font-size: 44px; margin: 2px 0 4px; }
+  .record { margin: 0 0 6px; font-size: 15px; }
+  .record.new { font-size: 17px; }
+  .stats { gap: 8px; }
+  .stats div { min-width: 96px; padding: 4px 10px; flex-direction: row; gap: 6px; }
+  .stats span { font-size: 20px; }
+  .stats b { font-size: 20px; }
+  .cheer { margin: 6px 0 4px; font-size: 16px; }
+  #end .btn { padding: 8px 18px; font-size: 18px; }
+}
+/* Results on narrow phones: stats and buttons side by side */
+@media (max-width: 480px) {
+  #end .panel { padding: 20px 14px; }
+  #end h2 { font-size: 26px; }
+  .stats { flex-wrap: nowrap; gap: 6px; }
+  .stats div { min-width: 0; flex: 1; padding: 8px 4px; border-radius: 14px; }
+  .stats span { font-size: 22px; }
+  .stats b { font-size: 22px; }
+  .stats small { font-size: 11px; line-height: 1.1; }
+  #end .row { flex-wrap: nowrap; gap: 8px; }
+  #end .btn { margin: 0; padding: 10px 14px; font-size: 17px; }
+}

@@ -2,6 +2,7 @@
 // then both come back (arms down, feet together). Arm waving alone doesn't count.
 import { view, ctx, sfx, say, popup, burst, drawEmoji, bigText, drawPlayer, circle, progressBar } from "../fx.js";
 import { player } from "../tracker.js";
+import { body } from "../profile.js";
 
 export default {
   id: "jacks",
@@ -14,6 +15,15 @@ export default {
     ["👇", "Jump feet in + arms down"],
     ["🦶", "Stand back so your feet show"],
   ],
+  finger: [
+    ["👆", "Tap for each jumping jack"],
+    ["⏱️", "Tap fast to hit your goal"],
+    ["🦘", "Even better: do real ones!"],
+  ],
+  fingerTip: "👆 Tap for each jumping jack!",
+  legs: true, // needs the camera to see legs
+  // Stars come from the rep goal instead of the score.
+  rate: (g) => (g.reps >= g.cfg.goal ? 3 : g.reps >= g.cfg.goal * 0.7 ? 2 : g.reps >= g.cfg.goal * 0.4 ? 1 : 0),
   mouse: "head", // mouse button = arms up + feet apart
   levels: {
     // spread = how much wider (in shoulder-widths) the feet must go than when standing
@@ -21,7 +31,7 @@ export default {
     medium: { time: 60, goal: 25, upAtHead: true,  downBelow: 0.45, spread: 0.5 },
     hard:   { time: 60, goal: 40, upAtHead: true,  downBelow: 0.6,  spread: 0.65 },
   },
-  create: (cfg) => new Jacks(cfg),
+  create: (cfg) => new Jacks({ ...cfg, spread: cfg.spread * body.legs }),
 };
 
 // Knees move apart less than ankles during a jack, so they need a smaller change.
@@ -116,6 +126,7 @@ class Jacks {
 
   cue() {
     const st = this.status;
+    if (player.finger) return this.state === "down" ? ["👆 Tap for a jumping jack!", "#ffe066"] : ["⬇️ Now let go!", "#9dffb0"];
     if (!st.legsSeen) return ["🦶 Step back so I can see your feet!", "#ffb3c1"];
     if (!st.handsSeen) return ["✋ Show both hands!", "#ffb3c1"];
     if (this.state === "down") {

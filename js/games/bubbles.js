@@ -1,6 +1,7 @@
 // Bubble Pop: pop floating bubbles with your hands. Golden bubbles appear up high for bonus points.
 import { view, ctx, sfx, popup, burst, drawEmoji, drawPlayer, circle, rand, clamp } from "../fx.js";
 import { player } from "../tracker.js";
+import { body } from "../profile.js";
 
 export default {
   id: "bubbles",
@@ -13,13 +14,20 @@ export default {
     ["🌟", "Gold bubbles = 3 points"],
     ["⚡", "Pop fast for combos"],
   ],
+  finger: [
+    ["👆", "Touch bubbles to pop them"],
+    ["✌️", "Two fingers pop twice as fast"],
+    ["🌟", "Gold ones = 3 points"],
+  ],
+  fingerTip: "👆 Touch the bubbles!",
+  stars: [20, 40, 60], // scores for 1, 2, 3 stars per minute of play
   mouse: "hand",
   levels: {
     easy:   { time: 60, every: 0.65, speed: 0.12, size: 0.075, gold: 0.12, spread: 3.5 },
     medium: { time: 60, every: 0.5,  speed: 0.18, size: 0.062, gold: 0.14, spread: 4.2 },
     hard:   { time: 75, every: 0.38, speed: 0.25, size: 0.052, gold: 0.16, spread: 5.0 },
   },
-  create: (cfg) => new Bubbles(cfg),
+  create: (cfg) => new Bubbles({ ...cfg, spread: cfg.spread * body.reach }),
 };
 
 class Bubbles {

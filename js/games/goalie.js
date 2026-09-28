@@ -1,6 +1,7 @@
 // Goalie Save: soccer balls fly at you — block them with your hands!
 import { view, ctx, sfx, say, tone, popup, burst, drawEmoji, bigText, drawPlayer, rand, clamp } from "../fx.js";
 import { player } from "../tracker.js";
+import { body } from "../profile.js";
 
 export default {
   id: "goalie",
@@ -13,6 +14,13 @@ export default {
     ["🧤", "Put your hand there to save"],
     ["🦸", "Far shots = super saves!"],
   ],
+  finger: [
+    ["🎯", "Watch the target ring"],
+    ["👆", "Touch the ball to save it"],
+    ["🦸", "Far shots = super saves"],
+  ],
+  fingerTip: "👆 Touch the ball to save it!",
+  stars: [16, 32, 48], // scores for 1, 2, 3 stars per minute of play
   mouse: "hand",
   levels: {
     // travel = seconds for a shot to reach you, spread = how far from your body (shoulder-widths)
@@ -20,7 +28,7 @@ export default {
     medium: { time: 75, travel: 1.7, every: 1.7, spread: 1.8, max: 2 },
     hard:   { time: 90, travel: 1.2, every: 1.2, spread: 2.2, max: 2 },
   },
-  create: (cfg) => new Goalie(cfg),
+  create: (cfg) => new Goalie({ ...cfg, spread: cfg.spread * body.reach }),
 };
 
 class Goalie {

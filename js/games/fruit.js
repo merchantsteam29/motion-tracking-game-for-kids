@@ -1,6 +1,7 @@
 // Fruit Slice: swipe your hands through flying fruit. Slice glowing power-ups, avoid bombs.
 import { view, ctx, sfx, say, tone, popup, burst, drawEmoji, bigText, drawPlayer, circle, progressBar, rand, pick, clamp } from "../fx.js";
 import { player } from "../tracker.js";
+import { body } from "../profile.js";
 
 const FRUITS = [
   { e: "🍉", c: "#ff4d6d" }, { e: "🍎", c: "#ff3b3b" }, { e: "🍊", c: "#ff9f1c" }, { e: "🍋", c: "#ffe066" },
@@ -26,13 +27,20 @@ export default {
     ["⚡", "Slice glowing power-ups"],
     ["💣", "Skip the bombs (Medium & Hard)"],
   ],
+  finger: [
+    ["👆", "Swipe your finger to slice"],
+    ["✌️", "Two fingers = two blades"],
+    ["⚡", "Slice power-ups too!"],
+  ],
+  fingerTip: "👆 Swipe to slice!",
+  stars: [15, 30, 45], // scores for 1, 2, 3 stars per minute of play
   mouse: "hand",
   levels: {
     easy:   { time: 60, every: 1.3,  gravity: 0.6, size: 0.07,  bombs: 0,    power: 0.12, minSpeed: 0.8, burst: [1, 2] },
     medium: { time: 60, every: 1.0,  gravity: 0.8, size: 0.06,  bombs: 0.08, power: 0.1,  minSpeed: 1.4, burst: [1, 3] },
     hard:   { time: 75, every: 0.8,  gravity: 1.0, size: 0.055, bombs: 0.15, power: 0.09, minSpeed: 2.0, burst: [2, 4] },
   },
-  create: (cfg) => new FruitSlice(cfg),
+  create: (cfg) => new FruitSlice({ ...cfg, minSpeed: cfg.minSpeed * body.swipe }),
 };
 
 class FruitSlice {

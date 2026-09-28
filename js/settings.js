@@ -2,6 +2,7 @@
 const KEY = "moveplay-settings";
 
 export const DEFAULTS = {
+  age: 0,               // player's age (0 = not set); used for average height and body proportions
   sound: true,          // sound effects + music
   voice: true,          // spoken counts and tips
   volume: 0.8,          // 0..1
@@ -11,7 +12,7 @@ export const DEFAULTS = {
   showCamera: true,     // camera picture behind the game (off = space background)
   gameLength: "normal", // short | normal | long
   calm: false,          // no screen shake, fewer sparkles
-  noCamera: false,      // play with touch/mouse instead of the camera
+  noCamera: false,      // finger mode: play with touch/mouse instead of the camera
   debug: false,         // show tracking info
 };
 
@@ -27,6 +28,7 @@ function clean(saved) {
     if (typeof v !== typeof def) continue;
     if (CHOICES[k] && !CHOICES[k].includes(v)) continue;
     if (k === "volume" && !(v >= 0 && v <= 1)) continue;
+    if (k === "age" && !(v === 0 || (Number.isInteger(v) && v >= 3 && v <= 16))) continue;
     out[k] = v;
   }
   return out;

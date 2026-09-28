@@ -1,9 +1,11 @@
 // Menu, round flow (ready → countdown → play → results), HUD and main loop.
-import { view, setCtx, ctx, sfx, say, setMuted, isMuted, clearEffects, updateEffects, drawEffects, bigText, pick, unlockAudio } from "./fx.js";
+import { view, setCtx, ctx, sfx, say, tone, setMuted, isMuted, clearEffects, updateEffects, drawEffects, bigText, circle, pick, unlockAudio } from "./fx.js";
 import { registerServiceWorker } from "./config.js";
 import { player, initTracking, updateTracking, updateFromMouse, hasCamera, drawCamera, restartCamera, stats } from "./tracker.js";
 import { settings, onSettingsChange, GAME_LENGTH } from "./settings.js";
 import { buildSettings, refreshCameras } from "./settings-ui.js";
+import { body, formatDistance, ageLabel } from "./profile.js";
+import { starsFor, getBest, bestStars, recordResult } from "./progress.js";
 import dodge from "./games/dodge.js";
 import bubbles from "./games/bubbles.js";
 import jacks from "./games/jacks.js";
@@ -16,6 +18,8 @@ import balloon from "./games/balloon.js";
 import knees from "./games/knees.js";
 
 const MODES = [fruit, dodge, bubbles, goalie, moles, balloon, freeze, jacks, knees, simon];
+const LEVELS = ["easy", "medium", "hard"];
+const LEVEL_NAMES = { easy: "Easy", medium: "Medium", hard: "Hard" };
 const CHEERS = [
   "You're a super mover! 💪",
   "Wow, what a champion! 🏆",
@@ -31,13 +35,16 @@ const screens = { menu: $("menu"), setup: $("setup"), settings: $("settings"), l
 
 let mode = MODES[0];
 let levelName = "easy";
-let game = null;     // the running mini-game
-let session = null;  // shared round state
-let mouseMode = settings.noCamera;
+let lastCfg = null;
+let game = null;       // the running mini-game
+let session = null;    // shared round state
+let mouseMode = settings.noCamera; // finger/mouse instead of camera
 let debug = false;     // press D in game to show raw tracker points (same as the Settings switch)
 let current = "menu";  // which screen is showing
 let beforeSettings = "menu";
-const mouse = { x: innerWidth / 2, y: innerHeight / 2, down: false, leg: 1 };
+let confetti = [];
+// Pointer state for finger mode: every finger currently touching the screen.
+const mouse = { x: innerWidth / 2, y: innerHeight / 2, down: false, leg: 1, touch: false, pointers: new Map() };
 
 // ---------- Layout ----------
 function resize() {
@@ -56,6 +63,9 @@ function show(name) {
   for (const [k, el] of Object.entries(screens)) el.classList.toggle("hidden", k !== name);
   $("hud").classList.toggle("hidden", name !== null);
   $("settingsBtn").classList.toggle("hidden", name !== "menu" && name !== "setup");
+  $("pause").classList.add("hidden"); // any screen change (including starting over) closes the pause menu
+  if (name === "menu") refreshMenuStars();
+  if (name === "setup") refreshSetup();
 }
 
 function openSettings() {
@@ -65,25 +75,52 @@ function openSettings() {
 }
 
 // ---------- Menu ----------
+const starRow = (n) => [0, 1, 2].map((i) => `<i class="${i < n ? "on" : ""}">★</i>`).join("");
+
 function buildMenu() {
-  $("gameList").innerHTML = MODES.map((m) =>
-    `<button class="game-tile" data-game="${m.id}" style="--c:${m.color}"><span>${m.emoji}</span>${m.title}</button>`
+  $("gameList").innerHTML = MODES.map((m, i) =>
+    `<button class="game-tile" data-game="${m.id}" style="--c:${m.color}; --i:${i}">
+      <span>${m.emoji}</span>${m.title}<small class="tile-stars" aria-hidden="true"></small>
+    </button>`
   ).join("");
   $("gameList").querySelectorAll(".game-tile").forEach((btn) =>
     btn.addEventListener("click", () => openSetup(MODES.find((m) => m.id === btn.dataset.game)))
   );
 }
 
+function refreshMenuStars() {
+  $("gameList").querySelectorAll(".game-tile").forEach((btn) => {
+    const n = bestStars(btn.dataset.game);
+    btn.querySelector(".tile-stars").innerHTML = n ? starRow(n) : "";
+    btn.setAttribute("aria-label", `${btn.textContent.trim()}${n ? `, best ${n} stars` : ""}`);
+  });
+}
+
 function openSetup(m) {
   mode = m;
+  show("setup");
+}
+
+function refreshSetup() {
+  const m = mode, finger = settings.noCamera;
   $("setupEmoji").textContent = m.emoji;
   $("setupTitle").textContent = m.title;
-  $("setupHow").innerHTML = m.how.map(([e, t]) => `<div><span>${e}</span>${t}</div>`).join("");
-  show("setup");
+  $("setupHow").innerHTML = (finger ? m.finger : m.how).map(([e, t]) => `<div><span>${e}</span>${t}</div>`).join("");
+  $("setupInfo").textContent = finger
+    ? "👆 Finger mode is on: no camera needed"
+    : body.known
+      ? `🧒 Age ${ageLabel()} · stand about ${formatDistance(body.standM)} from the camera`
+      : "🧒 Set your age in ⚙️ Settings so the game fits your size";
+  const bests = LEVELS.map((l) => [l, getBest(m.id, l)]).filter(([, b]) => b);
+  $("setupBest").innerHTML = bests.length
+    ? "🏆 Best: " + bests.map(([l, b]) => `${LEVEL_NAMES[l]} ${b.score} <span class="mini-stars">${starRow(b.stars)}</span>`).join(" · ")
+    : "";
+  document.querySelectorAll(".level[data-level]").forEach((b) => b.classList.toggle("recommended", b.dataset.level === body.level));
 }
 
 // ---------- Round flow ----------
 async function start() {
+  if (settings.noCamera) mouseMode = true;
   if (!mouseMode && !hasCamera()) {
     $("camError").classList.add("hidden");
     document.querySelector(".spinner").classList.remove("hidden");
@@ -94,14 +131,15 @@ async function start() {
     if (!res.ok) { showCamError(res.error); return; }
   }
   const base = mode.levels[levelName];
-  const cfg = { ...base, time: Math.round(base.time * (GAME_LENGTH[settings.gameLength] ?? 1)) };
+  lastCfg = { ...base, time: Math.round(base.time * (GAME_LENGTH[settings.gameLength] ?? 1)) };
   clearEffects();
+  confetti = [];
   player.baseY = null;
-  game = mode.create(cfg);
-  session = { phase: "ready", countdown: 0, timeLeft: cfg.time, samples: [] };
+  game = mode.create(lastCfg);
+  session = { phase: "ready", countdown: 0, timeLeft: lastCfg.time, total: lastCfg.time, samples: [], paused: false, go: 0, playT: 0 };
   show(null);
   keepAwake(true);
-  say("Stand where I can see you!");
+  say(mouseMode ? "Get ready!" : "Stand where I can see you!");
 }
 
 // Keep phones and tablets from dimming the screen mid-game.
@@ -118,7 +156,9 @@ async function keepAwake(on) {
   } catch { wakeLock = null; }
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && session && session.phase !== "over") keepAwake(true);
+  const active = session && session.phase !== "over";
+  if (document.visibilityState === "hidden" && active) pauseGame(); // switching apps pauses the game
+  if (document.visibilityState === "visible" && active) keepAwake(true);
 });
 
 function showCamError(detail) {
@@ -128,22 +168,68 @@ function showCamError(detail) {
   $("camError").classList.remove("hidden");
 }
 
+// ---------- Pause ----------
+function pauseGame() {
+  if (!session || session.phase === "over" || session.paused) return;
+  session.paused = true;
+  $("pause").classList.remove("hidden");
+  $("resumeBtn").focus();
+}
+function resumeGame() {
+  if (!session) return;
+  session.paused = false;
+  $("pause").classList.add("hidden");
+}
+
+// ---------- Results ----------
 function endGame() {
   session.phase = "over";
+  session.paused = false;
   keepAwake(false);
-  sfx.fanfare();
-  $("endTitle").textContent = `🎉 Great ${mode.title}!`;
+  const stars = starsFor(mode, game, lastCfg);
+  const { isNew, previous } = recordResult(mode.id, levelName, game.score, stars);
+
+  $("endTitle").textContent = `${mode.emoji} ${mode.title} · ${LEVEL_NAMES[levelName]}`;
   $("endScore").textContent = game.score;
   $("endStats").innerHTML = game.results().map((r) =>
     `<div><span>${r.emoji}</span><b>${r.value}</b><small>${r.label}</small></div>`
   ).join("");
-  $("endCheer").textContent = pick(CHEERS);
-  say("Great workout!");
+  $("endStars").innerHTML = [0, 1, 2].map((i) =>
+    `<span class="star ${i < stars ? "on" : ""}" style="--d:${0.25 + i * 0.35}s">★</span>`).join("");
+  $("endStars").setAttribute("aria-label", `${stars} out of 3 stars`);
+  $("endRecord").className = "record" + (isNew ? " new" : "");
+  $("endRecord").textContent = isNew
+    ? (previous === null ? "🏆 First score saved!" : `🏆 New record! (old best ${previous})`)
+    : `Best: ${getBest(mode.id, levelName)?.score ?? game.score}`;
+  $("endCheer").textContent = stars === 3 ? "Perfect! Three stars! 🌟" : pick(CHEERS);
   show("end");
+
+  sfx.fanfare();
+  for (let i = 0; i < stars; i++) setTimeout(() => tone(660 + i * 220, 0.18, "triangle", 0.2), 250 + i * 350);
+  say(isNew && previous !== null ? "New record!" : stars === 3 ? "Three stars! Amazing!" : "Great workout!");
+  launchConfetti(isNew ? 220 : 60 + stars * 50);
 }
 
+function launchConfetti(n) {
+  if (settings.calm) n = Math.round(n / 4);
+  const colors = ["#ffd84d", "#ff5c7a", "#4dabff", "#2fcf8a", "#c77dff", "#ff9f1c"];
+  for (let i = 0; i < n; i++) {
+    confetti.push({
+      x: Math.random() * view.W, y: -20 - Math.random() * view.H * 0.5,
+      vx: (Math.random() - 0.5) * 120, vy: 80 + Math.random() * 160,
+      a: Math.random() * 6, va: (Math.random() - 0.5) * 10,
+      w: 6 + Math.random() * 6, h: 10 + Math.random() * 8, c: pick(colors),
+    });
+  }
+}
+
+// ---------- Update ----------
 function update(dt) {
-  if (!session || session.phase === "over") return;
+  // Confetti keeps falling on the results screen.
+  for (const p of confetti) { p.x += p.vx * dt; p.y += p.vy * dt; p.a += p.va * dt; p.vx += Math.sin(p.y / 40) * 4; }
+  confetti = confetti.filter((p) => p.y < view.H + 30);
+
+  if (!session || session.phase === "over" || session.paused) return;
 
   if (session.phase === "ready") {
     if (player.visible && player.seenFor > 1.2) {
@@ -165,12 +251,15 @@ function update(dt) {
       const s = session.samples.sort((a, b) => a - b);
       player.baseY = s.length ? s[Math.floor(s.length / 2)] : player.head.y;
       session.phase = "play";
+      session.go = 0.8;
       sfx.go();
       say("Go!");
     }
     return;
   }
 
+  session.go = Math.max(0, session.go - dt);
+  session.playT += dt;
   updateEffects(dt);
   if (!player.visible) return; // pause while nobody is in view
 
@@ -208,7 +297,7 @@ function drawBackground(now) {
 function draw(now) {
   const { W, H } = view;
   ctx.save();
-  if (game?.shake > 0 && !settings.calm) {
+  if (game?.shake > 0 && !settings.calm && !session?.paused) {
     const m = game.shake * 30;
     ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
   }
@@ -218,22 +307,112 @@ function draw(now) {
     if (session.phase === "play") game.draw(now);
     drawEffects();
 
-    if (session.phase === "ready" || !player.visible) {
-      ctx.fillStyle = "rgba(18, 12, 46, 0.55)";
-      ctx.fillRect(0, 0, W, H);
-      const msg = player.visible ? "Great! Stay right there…" : "🧍 Step into the picture!";
-      bigText(msg, W / 2, H / 2 - 20, Math.min(64, W / 12));
-      bigText("Show your head, shoulders & hands", W / 2, H / 2 + 45, Math.min(30, W / 22), "#d9d2ff");
-    } else if (session.phase === "countdown") {
-      bigText(`${mode.emoji} ${mode.title}`, W / 2, H / 2 - 130, Math.min(52, W / 14), "#d9d2ff");
-      bigText(String(Math.ceil(session.countdown)), W / 2, H / 2, 160 * (1 + (session.countdown % 1) * 0.5), "#ffe066");
+    if (session.phase === "ready" || (!player.visible && !mouseMode)) drawGetReady(now);
+    else if (session.phase === "countdown") drawCountdown();
+    else if (session.go > 0) {
+      const k = session.go / 0.8;
+      ctx.globalAlpha = Math.min(1, k * 2);
+      bigText("GO! 🚀", W / 2, H / 2, Math.min(140, W / 5) * (1.4 - k * 0.4), "#9dffb0");
+      ctx.globalAlpha = 1;
     }
+    if (session.phase === "play" && mouseMode && session.playT < 5 && mode.fingerTip) {
+      ctx.globalAlpha = Math.min(1, (5 - session.playT) / 0.8);
+      bigText(mode.fingerTip, W / 2, H - 40, Math.min(30, W / 20), "#ffe066");
+      ctx.globalAlpha = 1;
+    }
+    if (session.paused) { ctx.fillStyle = "rgba(15, 10, 42, 0.55)"; ctx.fillRect(0, 0, W, H); }
 
     if (debug || settings.debug) drawDebug();
-    $("hudScore").textContent = `⭐ ${game.score}`;
-    $("hudTime").textContent = `⏱ ${Math.max(0, Math.ceil(session.timeLeft))}`;
+    updateHud();
+  }
+
+  // Results confetti
+  for (const p of confetti) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.a);
+    ctx.fillStyle = p.c;
+    ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h * Math.abs(Math.cos(p.a * 1.3)) + 2);
+    ctx.restore();
   }
   ctx.restore();
+}
+
+function updateHud() {
+  const left = Math.max(0, session.timeLeft);
+  $("hudScore").textContent = game.score;
+  $("hudTime").textContent = Math.ceil(session.phase === "play" ? left : session.total);
+  $("hudTimeBar").style.transform = `scaleX(${session.phase === "play" ? left / session.total : 1})`;
+  $("hudTimeChip").classList.toggle("low", session.phase === "play" && left <= 10);
+}
+
+// "Get in position" screen: a body outline to line up with and a live checklist.
+function drawGetReady(now) {
+  const { W, H } = view;
+  ctx.fillStyle = "rgba(15, 10, 42, 0.6)";
+  ctx.fillRect(0, 0, W, H);
+
+  if (mouseMode) {
+    bigText("👆 Get your finger ready!", W / 2, H / 2, Math.min(56, W / 13));
+    return;
+  }
+
+  // Outline of where to stand
+  const u = Math.min(W, H) * 0.09, cx = W / 2, top = H * 0.2;
+  ctx.save();
+  ctx.setLineDash([12, 10]);
+  ctx.lineWidth = 5;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = player.visible ? "rgba(157, 255, 176, 0.9)" : "rgba(255, 255, 255, 0.55)";
+  ctx.beginPath(); ctx.arc(cx, top + u, u * 0.8, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx - u * 1.6, top + u * 2.4); ctx.lineTo(cx + u * 1.6, top + u * 2.4);
+  ctx.moveTo(cx - u * 1.6, top + u * 2.4); ctx.lineTo(cx - u * 2.4, top + u * 1.2);
+  ctx.moveTo(cx + u * 1.6, top + u * 2.4); ctx.lineTo(cx + u * 2.4, top + u * 1.2);
+  ctx.moveTo(cx, top + u * 2.4); ctx.lineTo(cx, top + u * 4.8);
+  ctx.stroke();
+  ctx.restore();
+
+  const msg = player.visible ? "Great! Hold still…" : "🧍 Step into the picture!";
+  bigText(msg, W / 2, Math.max(70, top - 20), Math.min(52, W / 13));
+
+  // Live checklist
+  const items = [
+    ["🙂 Head", player.head.ok],
+    ["💪 Shoulders", player.shoulders[0].ok && player.shoulders[1].ok],
+    ["✋ Hands", player.hands[0].ok || player.hands[1].ok],
+  ];
+  if (mode.legs) items.push(["🦵 Legs", player.knees[0].ok && player.knees[1].ok]);
+  const cw = Math.min(150, (W - 40) / items.length - 10), y = top + u * 5.6;
+  items.forEach(([label, ok], i) => {
+    const x = W / 2 + (i - (items.length - 1) / 2) * (cw + 10);
+    ctx.fillStyle = ok ? "rgba(47, 207, 138, 0.9)" : "rgba(20, 12, 56, 0.8)";
+    ctx.beginPath(); ctx.roundRect(x - cw / 2, y - 22, cw, 44, 22); ctx.fill();
+    bigText(`${label}${ok ? " ✓" : ""}`, x, y + 2, Math.min(20, cw / 7));
+  });
+
+  // Hold-still progress ring
+  if (player.visible) {
+    const f = Math.min(1, player.seenFor / 1.2);
+    ctx.strokeStyle = "#9dffb0";
+    ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(cx, top + u, u * 1.05, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2); ctx.stroke();
+  }
+  const tip = body.known ? `Stand about ${formatDistance(body.standM)} from the camera` : "Stand back so the camera can see you";
+  bigText(tip, W / 2, Math.min(H - 30, y + 60), Math.min(24, W / 26), "#d9d2ff");
+}
+
+function drawCountdown() {
+  const { W, H } = view;
+  const n = Math.ceil(session.countdown), f = session.countdown % 1 || 1;
+  bigText(`${mode.emoji} ${mode.title}`, W / 2, H / 2 - Math.min(170, H * 0.3), Math.min(52, W / 14), "#d9d2ff");
+  const r = Math.min(W, H) * 0.16;
+  circle(W / 2, H / 2, r, "rgba(15, 10, 42, 0.55)");
+  ctx.strokeStyle = "#ffe066";
+  ctx.lineWidth = 10;
+  ctx.lineCap = "round";
+  ctx.beginPath(); ctx.arc(W / 2, H / 2, r, -Math.PI / 2, -Math.PI / 2 + f * Math.PI * 2); ctx.stroke();
+  bigText(String(n), W / 2, H / 2 + 4, r * (1.1 + (1 - f) * 0.2), "#ffe066");
 }
 
 function drawDebug() {
@@ -249,6 +428,7 @@ let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
+  player.finger = mouseMode;
   if (mouseMode) updateFromMouse(mouse, mode.mouse, dt);
   else updateTracking(dt);
   update(dt);
@@ -261,14 +441,27 @@ requestAnimationFrame(loop);
 document.querySelectorAll(".level[data-level]").forEach((btn) =>
   btn.addEventListener("click", () => { unlockAudio(); levelName = btn.dataset.level; start(); })
 );
-const toMenu = () => { game = null; session = null; keepAwake(false); show("menu"); };
-const toSetup = () => { game = null; session = null; keepAwake(false); show("setup"); };
+const leaveGame = () => { game = null; session = null; confetti = []; keepAwake(false); };
+const toMenu = () => { leaveGame(); show("menu"); };
+const toSetup = () => { leaveGame(); show("setup"); };
 $("setupBack").addEventListener("click", toMenu);
 $("againBtn").addEventListener("click", () => { unlockAudio(); start(); });
 $("menuBtn").addEventListener("click", toMenu);
+$("backBtn").addEventListener("click", toSetup);
+$("pauseBtn").addEventListener("click", pauseGame);
+$("resumeBtn").addEventListener("click", resumeGame);
+$("restartBtn").addEventListener("click", () => { unlockAudio(); start(); });
+$("quitBtn").addEventListener("click", () => { if (session && session.phase !== "over") endGame(); });
+$("mouseModeBtn").addEventListener("click", () => { unlockAudio(); mouseMode = true; start(); });
+
 addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && current === "settings") show(beforeSettings);
-  else if (e.key === "Escape" && current === "setup") toMenu();
+  const inGame = current === null && session && session.phase !== "over";
+  if (e.key === "Escape" || e.key === "p" || e.key === "P") {
+    if (inGame) { session.paused ? resumeGame() : pauseGame(); return; }
+    if (e.key !== "Escape") return;
+    if (current === "settings") show(beforeSettings);
+    else if (current === "setup") toMenu();
+  }
   if ((e.key === "d" || e.key === "D") && e.target === document.body) debug = !debug;
 });
 
@@ -276,13 +469,13 @@ addEventListener("keydown", (e) => {
 buildSettings($("settingsBody"));
 $("settingsBtn").addEventListener("click", openSettings);
 $("settingsBack").addEventListener("click", () => show(beforeSettings));
+const applyCalm = () => document.body.classList.toggle("calm", settings.calm);
+applyCalm();
 onSettingsChange((key) => {
   if (key === "cameraId") restartCamera();
   if (key === "noCamera" || key === null) mouseMode = settings.noCamera;
+  if (key === "calm" || key === null) applyCalm();
 });
-$("backBtn").addEventListener("click", toSetup);
-$("quitBtn").addEventListener("click", () => { if (session && session.phase !== "over") endGame(); });
-$("mouseModeBtn").addEventListener("click", () => { unlockAudio(); mouseMode = true; start(); });
 
 // Fullscreen (great on tablets and TVs)
 if (!document.fullscreenEnabled) $("fullBtn").hidden = true;
@@ -294,9 +487,30 @@ $("muteBtn").addEventListener("click", () => {
   setMuted(!isMuted());
   $("muteBtn").textContent = isMuted() ? "🔇" : "🔊";
 });
-addEventListener("pointermove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
-canvas.addEventListener("pointerdown", () => { mouse.down = true; mouse.leg = 1 - mouse.leg; });
-addEventListener("pointerup", () => (mouse.down = false));
+
+// A soft click for every button tap.
+document.addEventListener("click", (e) => { if (e.target.closest("button, a.btn")) sfx.tap(); });
+
+// Pointer input: mouse, or one or more fingers in finger mode.
+const trackPointer = (e) => {
+  mouse.x = e.clientX; mouse.y = e.clientY;
+  if (mouse.pointers.has(e.pointerId)) mouse.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+};
+addEventListener("pointermove", trackPointer);
+canvas.addEventListener("pointerdown", (e) => {
+  mouse.touch = e.pointerType !== "mouse";
+  mouse.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  trackPointer(e);
+  mouse.down = true;
+  mouse.leg = e.clientX < innerWidth / 2 ? 0 : 1; // High Knees: left side = left knee
+  if (session?.phase === "play" && !session.paused) game.onTap?.(e.clientX, e.clientY);
+});
+const releasePointer = (e) => {
+  mouse.pointers.delete(e.pointerId);
+  mouse.down = mouse.pointers.size > 0;
+};
+addEventListener("pointerup", releasePointer);
+addEventListener("pointercancel", releasePointer);
 
 buildMenu();
 show("menu");

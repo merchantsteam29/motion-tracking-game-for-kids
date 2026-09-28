@@ -1,6 +1,7 @@
 // Freeze Dance: dance while the music plays, freeze like a statue when it stops.
 import { view, ctx, sfx, say, tone, popup, burst, drawEmoji, bigText, drawPlayer, progressBar, rand } from "../fx.js";
 import { player } from "../tracker.js";
+import { body } from "../profile.js";
 
 // A cheerful little loop (C major pentatonic) played with the built-in synth.
 const MELODY = [523, 659, 784, 659, 880, 784, 659, 587, 523, 587, 659, 784, 880, 1047, 880, 784];
@@ -18,6 +19,13 @@ export default {
     ["🧊", "FREEZE when it stops!"],
     ["⭐", "Stay still for bonus stars"],
   ],
+  finger: [
+    ["👆", "Wiggle your finger to dance"],
+    ["✋", "Lift it off to FREEZE"],
+    ["⭐", "Stay still for bonus stars"],
+  ],
+  fingerTip: "👆 Wiggle to dance, lift off to freeze",
+  stars: [40, 80, 120], // scores for 1, 2, 3 stars per minute of play
   mouse: "head",
   levels: {
     // still = how little you may move while frozen (body-widths per second)
@@ -25,7 +33,7 @@ export default {
     medium: { time: 75, dance: [4, 7], freeze: 3.5, still: 0.7 },
     hard:   { time: 90, dance: [3, 6], freeze: 4,   still: 0.5 },
   },
-  create: (cfg) => new FreezeDance(cfg),
+  create: (cfg) => new FreezeDance({ ...cfg, still: cfg.still * body.wobble }),
 };
 
 class FreezeDance {

@@ -1,6 +1,7 @@
 // Whack-a-Mole: moles pop out of holes all around you. Bop them with your hands!
 import { view, ctx, sfx, tone, popup, burst, drawEmoji, drawPlayer, rand, pick, clamp } from "../fx.js";
 import { player } from "../tracker.js";
+import { body } from "../profile.js";
 
 // Hole positions around the body, in shoulder-widths from the chest.
 const SPOTS = [
@@ -19,13 +20,20 @@ export default {
     ["🌟", "Gold moles = 3 points"],
     ["🐰", "Don't bop the bunny! (Medium & Hard)"],
   ],
+  finger: [
+    ["👆", "Tap the moles"],
+    ["🌟", "Gold moles = 3 points"],
+    ["🐰", "Don't tap the bunny!"],
+  ],
+  fingerTip: "👆 Tap the moles!",
+  stars: [15, 30, 45], // scores for 1, 2, 3 stars per minute of play
   mouse: "hand",
   levels: {
     easy:   { time: 60, every: 1.1, up: 2.4, spots: 6, reach: 1.0, bunny: 0,    gold: 0.12 },
     medium: { time: 60, every: 0.8, up: 1.7, spots: 8, reach: 1.05, bunny: 0.12, gold: 0.1 },
     hard:   { time: 75, every: 0.6, up: 1.2, spots: 8, reach: 1.15, bunny: 0.18, gold: 0.1 },
   },
-  create: (cfg) => new Moles(cfg),
+  create: (cfg) => new Moles({ ...cfg, reach: cfg.reach * body.reach }),
 };
 
 class Moles {

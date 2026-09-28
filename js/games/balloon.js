@@ -13,6 +13,13 @@ export default {
     ["🎈", "Don't let them touch the ground"],
     ["🔥", "Keep a streak going!"],
   ],
+  finger: [
+    ["👆", "Tap balloons to bop them up"],
+    ["✌️", "Two fingers for two balloons"],
+    ["🔥", "Keep a streak going"],
+  ],
+  fingerTip: "👆 Tap the balloons up!",
+  stars: [15, 30, 45], // scores for 1, 2, 3 stars per minute of play
   mouse: "hand",
   levels: {
     easy:   { time: 60, count: 1, gravity: 0.11, maxFall: 0.2,  bounce: 0.55, size: 0.08 },

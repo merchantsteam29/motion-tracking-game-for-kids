@@ -1,6 +1,7 @@
 // Dodge & Duck: step side to side to dodge rocks, squat under rainbow waves, reach for stars.
 import { view, ctx, sfx, say, tone, popup, burst, drawEmoji, bigText, drawPlayer, circle, rand, pick, clamp } from "../fx.js";
 import { player } from "../tracker.js";
+import { body } from "../profile.js";
 
 const ROCKS = ["☄️", "🪨", "☄️", "🌑"];
 
@@ -15,13 +16,20 @@ export default {
     ["⬇️", "Squat when it says DUCK!"],
     ["🙌", "Grab the stars"],
   ],
+  finger: [
+    ["👆", "Drag left and right to dodge"],
+    ["⬇️", "Drag down low to duck"],
+    ["⭐", "Touch stars to grab them"],
+  ],
+  fingerTip: "👆 Drag to move, drag down to duck",
+  stars: [30, 60, 100], // scores for 1, 2, 3 stars per minute of play
   mouse: "head",
   levels: {
     easy:   { time: 60, rockEvery: 1.7,  rockSpeed: 0.20, rockSize: 0.050, aim: 0.35, starEvery: 2.0, duckEvery: 10, duckWarn: 2.2, duckDepth: 0.50 },
     medium: { time: 75, rockEvery: 1.1,  rockSpeed: 0.30, rockSize: 0.055, aim: 0.50, starEvery: 2.4, duckEvery: 7,  duckWarn: 1.7, duckDepth: 0.75 },
     hard:   { time: 90, rockEvery: 0.75, rockSpeed: 0.42, rockSize: 0.060, aim: 0.65, starEvery: 2.8, duckEvery: 5,  duckWarn: 1.3, duckDepth: 1.00 },
   },
-  create: (cfg) => new Dodge(cfg),
+  create: (cfg) => new Dodge({ ...cfg, duckDepth: cfg.duckDepth * body.legs }),
 };
 
 class Dodge {
@@ -71,8 +79,8 @@ class Dodge {
     if (this.starTimer <= 0) {
       this.starTimer = cfg.starEvery * rand(0.8, 1.2);
       this.starList.push({
-        x: clamp(player.head.x + rand(-2.2, 2.2) * s, 40, W - 40),
-        y: clamp(player.head.y - s * rand(0.3, 1.4), 90, H - 60),
+        x: clamp(player.head.x + rand(-2.2, 2.2) * s * body.reach, 40, W - 40),
+        y: clamp(player.head.y - s * rand(0.3, 1.4) * body.reach, 90, H - 60),
         r: unit * 0.045, life: 4.5, t: 0,
       });
     }
@@ -86,12 +94,12 @@ class Dodge {
     }
     if (this.bar) this.updateBar(dt);
 
-    const body = this.bodyCircles();
+    const hitCircles = this.bodyCircles();
     for (let i = this.rocks.length - 1; i >= 0; i--) {
       const rock = this.rocks[i];
       rock.y += rock.vy * dt;
       rock.a += rock.spin * dt;
-      if (body.some((c) => Math.hypot(c.x - rock.x, c.y - rock.y) < c.r + rock.r * 0.8)) {
+      if (hitCircles.some((c) => Math.hypot(c.x - rock.x, c.y - rock.y) < c.r + rock.r * 0.8)) {
         this.bonk();
         burst(rock.x, rock.y, "#ffb3c1", 10);
         this.rocks.splice(i, 1);
