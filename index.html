@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Move & Play</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <video id="cam" playsinline muted></video>
+  <canvas id="stage"></canvas>
+
+  <!-- In-game HUD -->
+  <div id="hud" class="hidden">
+    <div class="pill" id="hudScore">⭐ 0</div>
+    <div class="pill" id="hudTime">⏱ 60</div>
+    <div class="hud-right">
+      <button class="icon-btn" id="muteBtn" title="Sound on/off">🔊</button>
+      <button class="icon-btn" id="quitBtn" title="Stop game">⏹</button>
+    </div>
+  </div>
+
+  <!-- Menu -->
+  <section id="menu" class="screen">
+    <div class="card wide">
+      <h1>🏃 Move <span>&</span> Play! 🤸</h1>
+      <p class="tag">Games you play with your whole body</p>
+
+      <p class="pick">1. Pick a game</p>
+      <div class="games" id="gameList"></div>
+      <ul class="how" id="gameHow"></ul>
+
+      <p class="pick">2. Pick a level to start</p>
+      <div class="levels">
+        <button class="level easy"   data-level="easy">🐣<b>Easy</b><small>Little kids</small></button>
+        <button class="level medium" data-level="medium">🐯<b>Medium</b><small>Big kids</small></button>
+        <button class="level hard"   data-level="hard">🦖<b>Hard</b><small>Super speedy</small></button>
+      </div>
+      <p class="safety">🧍 Stand back so the camera sees your head, shoulders and hands. Make sure there's room to move and nothing to bump into!</p>
+      <p class="privacy">🔒 The camera picture stays on this device. Nothing is saved or sent anywhere.</p>
+    </div>
+  </section>
+
+  <!-- Loading / errors -->
+  <section id="loading" class="screen hidden">
+    <div class="card small">
+      <div class="spinner"></div>
+      <p id="loadingText">Waking up the camera…</p>
+      <div id="camError" class="hidden">
+        <p>😕 We couldn't use the camera.</p>
+        <p class="hint" id="camErrorDetail"></p>
+        <button class="btn" id="mouseModeBtn">🖱️ Play with the mouse instead</button>
+        <button class="btn ghost" id="backBtn">⬅ Back</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- End screen -->
+  <section id="end" class="screen hidden">
+    <div class="card">
+      <h1 id="endTitle">🎉 Great workout! 🎉</h1>
+      <div class="score-big" id="endScore">0</div>
+      <div class="stats" id="endStats"></div>
+      <p class="cheer" id="endCheer"></p>
+      <div class="levels">
+        <button class="btn" id="againBtn">🔁 Play again</button>
+        <button class="btn ghost" id="menuBtn">🏠 Menu</button>
+      </div>
+    </div>
+  </section>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
