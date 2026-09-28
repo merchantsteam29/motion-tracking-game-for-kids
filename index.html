@@ -2,8 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; font-src 'self'; worker-src 'self' blob:" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; connect-src 'self' https://cdn.jsdelivr.net https://storage.googleapis.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; font-src 'self'; worker-src 'self' blob:; manifest-src 'self'" />
+  <meta name="theme-color" content="#0f0a2a" />
+  <meta name="description" content="Move & Play: camera workout games for kids. Play in the browser on phones, tablets and computers." />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Move & Play" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <title>Move & Play</title>
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -16,6 +25,7 @@
     <div class="pill" id="hudScore">⭐ 0</div>
     <div class="pill" id="hudTime">⏱ 60</div>
     <div class="hud-right">
+      <button class="icon-btn" id="fullBtn" title="Fullscreen" aria-label="Fullscreen">⛶</button>
       <button class="icon-btn" id="muteBtn" title="Sound on/off" aria-label="Sound on/off">🔊</button>
       <button class="icon-btn" id="quitBtn" title="Stop game" aria-label="Stop game">⏹</button>
     </div>
@@ -28,6 +38,9 @@
       <p>Pick a game!</p>
     </header>
     <div class="games" id="gameList"></div>
+    <div class="menu-actions">
+      <a class="btn ghost" href="share.html">🔗 Share with friends</a>
+    </div>
     <p class="footnote">🔒 The camera stays on this device. Nothing is saved.</p>
   </section>
 
@@ -50,6 +63,7 @@
         <button class="level hard"   data-level="hard"><span>🦖</span>Hard</button>
       </div>
       <p class="footnote">🧍 Make room to move, and stand back so the camera sees your hands.</p>
+      <p class="footnote rotate-tip">📱 Tip: turn your phone sideways and lean it against something.</p>
     </div>
   </section>
 

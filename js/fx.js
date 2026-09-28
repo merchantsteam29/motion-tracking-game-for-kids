@@ -16,10 +16,24 @@ export function setMuted(m) {
   if (m && "speechSynthesis" in window) speechSynthesis.cancel();
 }
 
+// Phones only allow sound that starts from a tap, so call this from a click handler.
+export function unlockAudio() {
+  try {
+    audio ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === "suspended") audio.resume();
+  } catch { /* audio is optional */ }
+  if (!muted && "speechSynthesis" in window && !speechSynthesis.speaking) {
+    const u = new SpeechSynthesisUtterance(" ");
+    u.volume = 0;
+    speechSynthesis.speak(u);
+  }
+}
+
 export function tone(freq, dur = 0.12, type = "sine", vol = 0.2, slide = 0) {
   if (muted) return;
   try {
     audio ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === "suspended") audio.resume();
     const t = audio.currentTime;
     const o = audio.createOscillator();
     const g = audio.createGain();

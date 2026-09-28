@@ -27,13 +27,25 @@ npm install
 npm run dist
 ```
 
-- `dist/Move-and-Play-Setup-1.1.0.exe`: installer with Start menu and desktop shortcuts
-- `dist/Move-and-Play-Portable-1.1.0.exe`: runs without installing (good for a USB stick)
+- `dist/Move-and-Play-Setup-1.2.0.exe`: installer with Start menu and desktop shortcuts
+- `dist/Move-and-Play-Portable-1.2.0.exe`: runs without installing (good for a USB stick)
 
 The app works fully offline (tracker, AI models and font are bundled). Press **F11** for fullscreen.
 The .exe isn't code-signed, so Windows SmartScreen may say "Windows protected your PC": click **More info → Run anyway**.
 
-### Web version
+### Browser version (phones, tablets, computers)
+The website is published automatically to GitHub Pages by `.github/workflows/pages.yml` whenever `main` is pushed:
+**https://merchantsteam29.github.io/motion-tracking-game/**
+
+- Works on iPhone/iPad (Safari), Android (Chrome), and any computer with Chrome, Edge or Safari
+- Can be installed like an app (Add to Home Screen / Install app) and opens offline after the first visit
+- `share.html` is the share page: QR code plus copy/share link buttons
+- If your GitHub name differs, edit `js/config.js`
+
+**One-time setup:** publish the repo in GitHub Desktop (public), then on github.com open
+**Settings → Pages → Source: GitHub Actions**.
+
+### Web version (local testing)
 1. `npm install` (downloads the tracker files so it also works offline)
 2. `node server.js`
 3. Open **http://localhost:8080** in Chrome or Edge and click **Allow** for the camera.

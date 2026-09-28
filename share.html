@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; manifest-src 'self'; connect-src 'self'; worker-src 'self'" />
+  <meta name="theme-color" content="#0f0a2a" />
+  <meta name="description" content="Share Move & Play: camera workout games for kids that play in the browser." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <title>Share Move & Play</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="page">
+  <main class="share">
+    <a class="back-link" href="index.html">⬅ Back to games</a>
+
+    <header class="brand">
+      <h1>Share <span>Move & Play</span></h1>
+      <p>Send it to friends and family 🎉</p>
+    </header>
+
+    <section class="panel share-card">
+      <h2>🔗 Your share link</h2>
+      <p class="hint">Works on phones, tablets and computers with a camera. Nothing to download.</p>
+      <div class="qr-row">
+        <div id="qr" class="qr" role="img" aria-label="QR code for the game link"></div>
+        <div class="link-box">
+          <p>Scan the code with a phone camera, or send this link:</p>
+          <code id="siteLink"></code>
+          <div class="row">
+            <button class="btn" id="copyBtn">📋 Copy link</button>
+            <button class="btn" id="shareBtn" hidden>📤 Share…</button>
+            <a class="btn ghost" href="index.html">▶ Play now</a>
+          </div>
+          <p id="copyMsg" class="hint" aria-live="polite"></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel share-card">
+      <h2>💡 Good to know</h2>
+      <ul class="tips">
+        <li>🔒 The camera picture stays on the device. Nothing is saved or sent.</li>
+        <li>📷 Tap <b>Allow</b> when it asks to use the camera.</li>
+        <li>🧍 Stand back so the camera sees your head, shoulders and hands.</li>
+        <li>📱 On a phone or tablet, turn it sideways and lean it against something.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script src="vendor/qrcode.js"></script>
+  <script type="module" src="js/share.js"></script>
+</body>
+</html>

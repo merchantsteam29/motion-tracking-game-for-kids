@@ -1,5 +1,6 @@
 // Menu, round flow (ready → countdown → play → results), HUD and main loop.
-import { view, setCtx, ctx, sfx, say, setMuted, isMuted, clearEffects, updateEffects, drawEffects, bigText, pick } from "./fx.js";
+import { view, setCtx, ctx, sfx, say, setMuted, isMuted, clearEffects, updateEffects, drawEffects, bigText, pick, unlockAudio } from "./fx.js";
+import { registerServiceWorker } from "./config.js";
 import { player, initTracking, updateTracking, updateFromMouse, hasCamera, drawCamera, setSteadiness, stats } from "./tracker.js";
 import dodge from "./games/dodge.js";
 import bubbles from "./games/bubbles.js";
@@ -48,7 +49,7 @@ function applySteadiness(name) {
 
 // ---------- Layout ----------
 function resize() {
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(2, window.devicePixelRatio || 1); // phones can be 3x; 2x is sharp enough and much faster
   view.W = innerWidth;
   view.H = innerHeight;
   canvas.width = Math.round(view.W * dpr);
@@ -98,8 +99,26 @@ async function start() {
   game = mode.create(cfg);
   session = { phase: "ready", countdown: 0, timeLeft: cfg.time, samples: [] };
   show(null);
+  keepAwake(true);
   say("Stand where I can see you!");
 }
+
+// Keep phones and tablets from dimming the screen mid-game.
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && !wakeLock && "wakeLock" in navigator) {
+      wakeLock = await navigator.wakeLock.request("screen");
+      wakeLock.addEventListener("release", () => (wakeLock = null));
+    } else if (!on && wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } catch { wakeLock = null; }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && session && session.phase !== "over") keepAwake(true);
+});
 
 function showCamError(detail) {
   $("loadingText").textContent = "";
@@ -110,6 +129,7 @@ function showCamError(detail) {
 
 function endGame() {
   session.phase = "over";
+  keepAwake(false);
   sfx.fanfare();
   $("endTitle").textContent = `🎉 Great ${mode.title}!`;
   $("endScore").textContent = game.score;
@@ -238,12 +258,12 @@ requestAnimationFrame(loop);
 
 // ---------- UI wiring ----------
 document.querySelectorAll(".level[data-level]").forEach((btn) =>
-  btn.addEventListener("click", () => { levelName = btn.dataset.level; start(); })
+  btn.addEventListener("click", () => { unlockAudio(); levelName = btn.dataset.level; start(); })
 );
-const toMenu = () => { game = null; session = null; show("menu"); };
-const toSetup = () => { game = null; session = null; show("setup"); };
+const toMenu = () => { game = null; session = null; keepAwake(false); show("menu"); };
+const toSetup = () => { game = null; session = null; keepAwake(false); show("setup"); };
 $("setupBack").addEventListener("click", toMenu);
-$("againBtn").addEventListener("click", start);
+$("againBtn").addEventListener("click", () => { unlockAudio(); start(); });
 $("menuBtn").addEventListener("click", toMenu);
 addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !$("setup").classList.contains("hidden")) toMenu();
@@ -253,7 +273,14 @@ document.querySelectorAll("[data-steady]").forEach((b) => b.addEventListener("cl
 applySteadiness(store.get("hands"));
 $("backBtn").addEventListener("click", toSetup);
 $("quitBtn").addEventListener("click", () => { if (session && session.phase !== "over") endGame(); });
-$("mouseModeBtn").addEventListener("click", () => { mouseMode = true; start(); });
+$("mouseModeBtn").addEventListener("click", () => { unlockAudio(); mouseMode = true; start(); });
+
+// Fullscreen (great on tablets and TVs)
+if (!document.fullscreenEnabled) $("fullBtn").hidden = true;
+$("fullBtn").addEventListener("click", () => {
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else document.documentElement.requestFullscreen().catch(() => {});
+});
 $("muteBtn").addEventListener("click", () => {
   setMuted(!isMuted());
   $("muteBtn").textContent = isMuted() ? "🔇" : "🔊";
@@ -264,3 +291,4 @@ addEventListener("pointerup", () => (mouse.down = false));
 
 buildMenu();
 show("menu");
+registerServiceWorker();

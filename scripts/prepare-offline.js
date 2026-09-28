@@ -56,6 +56,10 @@ async function main() {
     if (fs.existsSync(path.join(font, f))) copy(path.join(font, f), path.join(vendor, "fonts", f));
   }
 
+  // QR codes for the share page
+  const qr = path.join(nm, "qrcode-generator", "qrcode.js");
+  if (fs.existsSync(qr)) copy(qr, path.join(vendor, "qrcode.js"));
+
   // Pose models (downloaded once)
   fs.mkdirSync(path.join(vendor, "models"), { recursive: true });
   for (const [name, url] of Object.entries(MODELS)) {

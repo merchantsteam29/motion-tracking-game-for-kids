@@ -18,6 +18,10 @@ const NOSE = 0, L_SHOULDER = 11, R_SHOULDER = 12, L_WRIST = 15, R_WRIST = 16,
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
+// Phones and tablets (including iPads that report as a Mac) get the lighter, faster model.
+export const MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+  (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+
 // ---------- One Euro filter: smooth when still, responsive when moving ----------
 const lpAlpha = (cutoff, dt) => 1 / (1 + 1 / (2 * Math.PI * cutoff) / dt);
 
@@ -170,23 +174,37 @@ export const stats = { fps: 0, detectMs: 0, model: "", raw: [null, null] };
 
 export const hasCamera = () => camReady;
 
-async function exists(url) {
-  try { return (await fetch(url, { method: "HEAD" })).ok; } catch { return false; }
-}
-
 async function loadVision() {
-  const local = await exists(`${LOCAL}tasks-vision/vision_bundle.mjs`);
-  const base = local ? `${LOCAL}tasks-vision` : CDN;
-  const mod = await import(local ? `${base}/vision_bundle.mjs` : base);
+  let mod, base;
+  try {
+    base = `${LOCAL}tasks-vision`;
+    mod = await import(`${base}/vision_bundle.mjs`);
+  } catch {
+    base = CDN;
+    mod = await import(CDN);
+  }
   const fileset = await mod.FilesetResolver.forVisionTasks(`${base}/wasm`);
   return { mod, fileset };
 }
 
-async function createLandmarker(name, delegate) {
+const modelCache = {};
+async function modelOptions(name) {
   const m = MODELS[name];
-  const modelAssetPath = (await exists(m.local)) ? m.local : m.cdn;
+  if (!modelCache[name]) {
+    try {
+      const res = await fetch(m.local);
+      if (!res.ok) throw new Error(res.status);
+      modelCache[name] = { modelAssetBuffer: new Uint8Array(await res.arrayBuffer()) };
+    } catch {
+      modelCache[name] = { modelAssetPath: m.cdn };
+    }
+  }
+  return modelCache[name];
+}
+
+async function createLandmarker(name, delegate) {
   return vision.mod.PoseLandmarker.createFromOptions(vision.fileset, {
-    baseOptions: { modelAssetPath, delegate },
+    baseOptions: { ...(await modelOptions(name)), delegate },
     runningMode: "VIDEO",
     numPoses: 1,
     minPoseDetectionConfidence: 0.5,
@@ -201,7 +219,9 @@ export async function initTracking(onStatus) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         // Smaller frames at a higher frame rate = fresher, smoother tracking.
-        video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 60 } },
+        video: MOBILE
+          ? { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }
+          : { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 60 } },
         audio: false,
       });
       video.srcObject = stream;
@@ -214,7 +234,7 @@ export async function initTracking(onStatus) {
         error: err?.name === "NotAllowedError"
           ? "Camera permission was blocked. Click the camera icon in the address bar and choose Allow, then try again."
           : !window.isSecureContext
-            ? "Open the game from http://localhost:8080 (run: node server.js). Browsers only allow cameras on secure pages."
+            ? "The camera only works on a secure (https://) link. Open the game from its shared web link instead."
             : "No camera was found, or another app is using it.",
       };
     }
@@ -224,8 +244,8 @@ export async function initTracking(onStatus) {
     try {
       vision ??= await loadVision();
       try {
-        landmarker = await createLandmarker("full", "GPU");
-        modelName = "full";
+        modelName = MOBILE ? "lite" : "full";
+        landmarker = await createLandmarker(modelName, "GPU");
       } catch {
         // No GPU: the lite model keeps things fast on the CPU.
         landmarker = await createLandmarker("lite", "CPU");
