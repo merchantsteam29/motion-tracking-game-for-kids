@@ -21,6 +21,11 @@ Webcam workout games for kids. Easy / Medium / Hard levels for mixed ages. Nothi
 | ⛷️ **Ski Slalom** | Step left and right to ski between the flags and miss the trees |
 | 🧽 **Window Wash** | Wipe the muddy window with big arm circles to reveal the picture |
 | 🥊 **Boxing Pads** | Punch the pads fast as they pop up (slow touches don't count) |
+| 🧱 **Hole in the Wall** | A wall rushes at you with a body-shaped hole; strike the pose to fit through |
+| 🥁 **Drum Beat** | Hit the drum pads in time as the rings close in |
+| 🚧 **Obstacle Run** | Step between 3 lanes, hop hurdles, duck bars, grab coins |
+| 🧘 **Yoga Stretch** | Hold calm stretches and balances (tree, star, airplane, side bends…) |
+| 🧠 **Quiz Reach** | Answer counting / colours / math questions by reaching for the right bubble |
 
 Body tracking uses [MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker) (free, runs in the browser).
 
@@ -32,8 +37,8 @@ npm install
 npm run dist
 ```
 
-- `dist/Move-and-Play-Setup-1.7.0.exe`: installer with Start menu and desktop shortcuts
-- `dist/Move-and-Play-Portable-1.7.0.exe`: runs without installing (good for a USB stick)
+- `dist/Move-and-Play-Setup-1.8.0.exe`: installer with Start menu and desktop shortcuts
+- `dist/Move-and-Play-Portable-1.8.0.exe`: runs without installing (good for a USB stick)
 
 The app works fully offline (tracker, AI models and font are bundled). Press **F11** for fullscreen.
 The .exe isn't code-signed, so Windows SmartScreen may say "Windows protected your PC": click **More info → Run anyway**.
@@ -59,6 +64,8 @@ Opening `index.html` by double-clicking won't work, because browsers only allow 
 
 ### Settings (⚙️ on the menu)
 Saved on each device:
+- **📷 Calibrate camera**: checks light, camera speed, distance and hands, then measures how far you can
+  reach up and out so targets land within your reach
 - **📏 Height** (feet/inches or cm): sizes targets, squats, knee lifts and jumping-jack feet to the player's
   build, shows how far back to stand, and recommends a level
 - **👆 Finger mode**: play every game by touching the screen, no camera (two fingers = two hands)

@@ -198,7 +198,26 @@ const cropCtx = crop.getContext("2d");
 const handFix = [{ dx: 0, dy: 0, seen: false, miss: 0 }, { dx: 0, dy: 0, seen: false, miss: 0 }];
 
 // Live numbers for the debug overlay (press D in game).
-export const stats = { fps: 0, detectMs: 0, model: "", raw: [null, null], handMs: 0, precise: [false, false], handFix };
+export const stats = { fps: 0, detectMs: 0, model: "", raw: [null, null], handMs: 0, precise: [false, false], handFix, brightness: null };
+// Switches that tests can flip to compare before/after.
+export const tuning = { lowLightBoost: true };
+
+// How bright the camera picture is (0 = black, 1 = white), checked a few times a second.
+const lumaCanvas = document.createElement("canvas");
+lumaCanvas.width = 32; lumaCanvas.height = 18;
+const lumaCtx = lumaCanvas.getContext("2d", { willReadFrequently: true });
+let lumaFrame = 0;
+function measureBrightness() {
+  if (lumaFrame++ % 10 !== 0) return;
+  try {
+    lumaCtx.drawImage(video, 0, 0, 32, 18);
+    const d = lumaCtx.getImageData(0, 0, 32, 18).data;
+    let sum = 0;
+    for (let i = 0; i < d.length; i += 4) sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+    const b = sum / (d.length / 4) / 255;
+    stats.brightness = stats.brightness == null ? b : stats.brightness * 0.7 + b * 0.3;
+  } catch { /* camera not ready */ }
+}
 
 let frameLoopStarted = false;
 
@@ -432,6 +451,14 @@ function refineHands(rough, lm) {
     cropCtx.drawImage(video, sx, sy, size, size, 0, 0, CROP, CROP);
     let res = null;
     try { res = handLandmarker.detect(crop); } catch { res = null; }
+    // Dim room and no hand found: try again with a brightened picture. (Only as a second try:
+    // brightening a picture that was fine can make things worse.)
+    if (!res?.landmarks?.length && tuning.lowLightBoost && stats.brightness != null && stats.brightness < 0.35) {
+      cropCtx.filter = `brightness(${clamp(0.45 / Math.max(stats.brightness, 0.05), 1.3, 2.6).toFixed(2)}) contrast(1.15)`;
+      cropCtx.drawImage(video, sx, sy, size, size, 0, 0, CROP, CROP);
+      cropCtx.filter = "none";
+      try { res = handLandmarker.detect(crop); } catch { res = null; }
+    }
     handMs = handMs * 0.9 + (performance.now() - started) * 0.1;
     stats.handMs = handMs;
     // Of the hands found in the crop, take the one nearest the rough spot.
@@ -444,6 +471,7 @@ function refineHands(rough, lm) {
       fix.seen = true;
       fix.miss = 0;
       fix.now = { x: nx, y: ny }; // exact spot this frame
+      fix.last = fix.now; fix.lastAt = performance.now();
       fix.shape = found.lm.map((q) => ({ x: (sx + q.x * size) / vw, y: (sy + q.y * size) / vh }));
       fix.shapeAt = performance.now();
       p.visibility = Math.max(p.visibility, 0.9); // the hand tracker is sure it's there
@@ -454,6 +482,15 @@ function refineHands(rough, lm) {
     }
     stats.precise[i] = fix.seen && fix.miss === 0;
   });
+
+  // Never let both circles sit on the same real hand (hands together, clapping, crossing):
+  // the one whose body-tracker guess is further away gives it up.
+  const [f0, f1] = handFix;
+  if (f0.now && f1.now && Math.hypot((f0.now.x - f1.now.x) * vw, (f0.now.y - f1.now.y) * vh) < shoulderPx * 0.3) {
+    const dist = (f, p) => (p ? Math.hypot(f.now.x - p.x, f.now.y - p.y) : Infinity);
+    const loser = dist(f0, rough[0]) <= dist(f1, rough[1]) ? f1 : f0;
+    loser.now = null; loser.shape = null; loser.seen = false; loser.miss++;
+  }
 }
 
 // Palm centre (wrist + four knuckles) of the detected hand closest to (cx, cy), in crop coords.
@@ -485,6 +522,7 @@ function detect(nowMs) {
   stats.model = modelName;
   maybeDowngrade();
 
+  measureBrightness();
   const t = nowMs / 1000;
   const r = videoRect();
   const mx = settings.mirror ? (x) => 1 - x : (x) => x;
@@ -531,9 +569,12 @@ function detect(nowMs) {
   if (lm) refineHands(rough, lm);
   // Use the hand tracker's exact spot when it ran this frame; otherwise the rough spot plus the last correction.
   const fixed = rough.map((p, i) => {
-    if (!p) return null;
     const f = handFix[i];
-    return f.now ? { x: f.now.x, y: f.now.y, visibility: p.visibility } : { x: p.x + f.dx, y: p.y + f.dy, visibility: p.visibility };
+    if (f.now) return { x: f.now.x, y: f.now.y, visibility: p ? p.visibility : 0.9 };
+    if (p) return { x: p.x + f.dx, y: p.y + f.dy, visibility: p.visibility };
+    // The body tracker lost the arm but the hand was seen a moment ago: keep it briefly.
+    if (f.seen && f.last && performance.now() - f.lastAt < 300) return { x: f.last.x, y: f.last.y, visibility: 0.6 };
+    return null;
   });
   let hA = fixed[0] ? at(fixed[0]) : null;
   let hB = fixed[1] ? at(fixed[1]) : null;

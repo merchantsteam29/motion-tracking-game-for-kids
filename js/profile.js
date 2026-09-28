@@ -32,8 +32,15 @@ export const body = {
   get heightCm() { return this.known ? settings.height : null; },
   // Leg moves (squats, knee lifts, jumping-jack feet) need less travel with shorter legs.
   get legs() { return this.known ? legShare(groupFor(settings.height)) / 0.48 : 1; },
-  // Bring targets a little closer for smaller players.
-  get reach() { return band(0.85, 0.92, 1, 1.05); },
+  // How far away targets can go: from the camera calibration if done (games assume about
+  // 2.1 shoulder-widths up and 1.9 out), otherwise a guess from the height.
+  get reach() {
+    if (settings.calibUp && settings.calibSide) {
+      return Math.min(1.25, Math.max(0.7, Math.min(settings.calibSide / 1.9, settings.calibUp / 2.1)));
+    }
+    return band(0.85, 0.92, 1, 1.05);
+  },
+  get calibrated() { return !!(settings.calibUp && settings.calibSide); },
   // Smaller kids wobble more when trying to stand still.
   get wobble() { return band(1.4, 1.2, 1, 0.9); },
   // How fast a swipe must be to slice fruit.

@@ -6,6 +6,7 @@ import { settings, onSettingsChange, GAME_LENGTH } from "./settings.js";
 import { buildSettings, refreshCameras } from "./settings-ui.js";
 import { body, formatDistance, heightLabel } from "./profile.js";
 import { starsFor, getBest, bestStars, recordResult } from "./progress.js";
+import { createCalibration } from "./calibrate.js";
 import dodge from "./games/dodge.js";
 import bubbles from "./games/bubbles.js";
 import jacks from "./games/jacks.js";
@@ -21,8 +22,13 @@ import rocket from "./games/rocket.js";
 import ski from "./games/ski.js";
 import wash from "./games/wash.js";
 import boxing from "./games/boxing.js";
+import wall from "./games/wall.js";
+import drums from "./games/drums.js";
+import run from "./games/run.js";
+import yoga from "./games/yoga.js";
+import quiz from "./games/quiz.js";
 
-const MODES = [fruit, dodge, bubbles, goalie, moles, boxing, balloon, wash, ski, freeze, jumprope, rocket, jacks, knees, simon];
+const MODES = [fruit, dodge, bubbles, goalie, moles, boxing, drums, quiz, balloon, wash, ski, run, wall, freeze, jumprope, rocket, jacks, knees, simon, yoga];
 const LEVELS = ["easy", "medium", "hard"];
 const LEVEL_NAMES = { easy: "Easy", medium: "Medium", hard: "Hard" };
 const CHEERS = [
@@ -36,7 +42,7 @@ const CHEERS = [
 const $ = (id) => document.getElementById(id);
 const canvas = $("stage");
 setCtx(canvas.getContext("2d"));
-const screens = { menu: $("menu"), setup: $("setup"), settings: $("settings"), loading: $("loading"), end: $("end") };
+const screens = { menu: $("menu"), setup: $("setup"), settings: $("settings"), calibrate: $("calibrate"), loading: $("loading"), end: $("end") };
 
 let mode = MODES[0];
 let levelName = "easy";
@@ -283,7 +289,8 @@ const bgStars = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.r
 
 function drawBackground(now) {
   const { W, H } = view;
-  if (hasCamera() && !mouseMode && settings.showCamera && session && session.phase !== "over") { drawCamera(ctx); return; }
+  const calibrating = current === "calibrate" && hasCamera() && !settings.noCamera;
+  if (calibrating || (hasCamera() && !mouseMode && settings.showCamera && session && session.phase !== "over")) { drawCamera(ctx); return; }
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, "#0f0a2a");
   g.addColorStop(1, "#2a1757");
@@ -341,6 +348,17 @@ function draw(now) {
     ctx.restore();
   }
   ctx.restore();
+}
+
+// ---------- Camera calibration ----------
+const calibration = createCalibration({ onExit: () => { keepAwake(false); show("settings"); } });
+function openCalibration() {
+  unlockAudio();
+  leaveGame();
+  mouseMode = settings.noCamera; // calibration always reads the real camera
+  show("calibrate");
+  keepAwake(true);
+  calibration.start();
 }
 
 function updateHud() {
@@ -440,10 +458,13 @@ function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   player.finger = mouseMode;
+  player.pointerDown = mouse.down; // finger/mouse held down (used by finger mode in some games)
   if (mouseMode) updateFromMouse(mouse, mode.mouse, dt);
   else updateTracking(dt);
   update(dt);
+  if (current === "calibrate") calibration.update(dt);
   draw(now);
+  if (current === "calibrate") calibration.draw(now);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
@@ -471,6 +492,7 @@ addEventListener("keydown", (e) => {
     if (inGame) { session.paused ? resumeGame() : pauseGame(); return; }
     if (e.key !== "Escape") return;
     if (current === "settings") show(beforeSettings);
+    else if (current === "calibrate") show("settings");
     else if (current === "setup") toMenu();
   }
   if ((e.key === "d" || e.key === "D") && e.target === document.body) debug = !debug;
@@ -481,6 +503,8 @@ buildSettings($("settingsBody"));
 $("settingsBtn").addEventListener("click", openSettings);
 $("settingsBack").addEventListener("click", () => show(beforeSettings));
 $("settingsDone").addEventListener("click", () => show(beforeSettings));
+$("set-calibrate").addEventListener("click", openCalibration);
+$("calibBack").addEventListener("click", () => { keepAwake(false); show("settings"); });
 const applyCalm = () => document.body.classList.toggle("calm", settings.calm);
 applyCalm();
 onSettingsChange((key) => {

@@ -20,6 +20,7 @@ const SCHEMA = [
     { key: "volume", label: "Volume", type: "range" },
   ] },
   { group: "📷 Camera & hands", items: [
+    { key: "calibrate", label: "📷 Calibrate camera", hint: "", type: "action", button: "Start" },
     { key: "hands", label: "Hand circles", hint: "Steady = calmer · Quick = less delay", type: "choice",
       options: [["steady", "🐢 Steady"], ["normal", "🙂 Normal"], ["quick", "⚡ Quick"]] },
     { key: "cameraId", label: "Camera", hint: "Pick which camera to use", type: "camera" },
@@ -49,6 +50,8 @@ function control(item) {
         <output id="heightValue" aria-live="polite"></output>
         <button data-step="1" aria-label="Taller">+</button>
       </div>`;
+    case "action":
+      return `<button class="btn small-btn" id="${id}" data-action="${item.key}">${item.button}</button>`;
     case "camera":
       return `<select id="${id}" data-key="${item.key}" aria-labelledby="${id}-label"><option value="">Default camera</option></select>`;
   }
@@ -64,7 +67,7 @@ export function buildSettings(container) {
         <div class="set-row">
           <div class="set-text">
             <span class="set-label" id="set-${it.key}-label">${it.label}</span>
-            ${it.type === "height" ? `<span class="set-hint" id="heightHint"></span>` : it.hint ? `<span class="set-hint">${it.hint}</span>` : ""}
+            ${it.type === "action" ? `<span class="set-hint" id="${it.key}Hint"></span>` : it.type === "height" ? `<span class="set-hint" id="heightHint"></span>` : it.hint ? `<span class="set-hint">${it.hint}</span>` : ""}
           </div>
           ${control(it)}
         </div>`).join("")}
@@ -116,6 +119,12 @@ function sync() {
   root.querySelectorAll(".seg button").forEach((b) =>
     b.setAttribute("aria-checked", String(settings[b.dataset.key] === b.dataset.value)));
   root.querySelectorAll("select").forEach((s) => (s.value = settings[s.dataset.key]));
+  const calibHint = root.querySelector("#calibrateHint");
+  if (calibHint) {
+    calibHint.textContent = body.calibrated
+      ? `Done ✓ reach: ${settings.calibUp.toFixed(1)} up, ${settings.calibSide.toFixed(1)} wide. Redo if you move the camera`
+      : "Checks light, distance and your reach so targets fit you";
+  }
   const heightValue = root.querySelector("#heightValue");
   if (heightValue) {
     heightValue.textContent = heightLabel();

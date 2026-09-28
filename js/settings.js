@@ -15,6 +15,8 @@ export const DEFAULTS = {
   calm: false,          // no screen shake, fewer sparkles
   noCamera: false,      // finger mode: play with touch/mouse instead of the camera
   debug: false,         // show tracking info
+  calibUp: 0,           // measured reach above the shoulders (shoulder-widths; 0 = not calibrated)
+  calibSide: 0,         // measured reach out to each side (shoulder-widths; 0 = not calibrated)
 };
 
 export const GAME_LENGTH = { short: 0.6, normal: 1, long: 1.5 };
@@ -34,6 +36,7 @@ function clean(saved) {
     if (CHOICES[k] && !CHOICES[k].includes(v)) continue;
     if (k === "volume" && !(v >= 0 && v <= 1)) continue;
     if (k === "height" && !(v === 0 || (v >= HEIGHT_MIN && v <= HEIGHT_MAX))) continue;
+    if ((k === "calibUp" || k === "calibSide") && !(v === 0 || (v >= 0.8 && v <= 4))) continue;
     out[k] = v;
   }
   return out;
