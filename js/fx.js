@@ -1,4 +1,5 @@
 // Shared drawing, sound and effects helpers.
+import { settings } from "./settings.js";
 export const view = { W: 0, H: 0 };
 export let ctx = null;
 export function setCtx(c) { ctx = c; }
@@ -30,7 +31,8 @@ export function unlockAudio() {
 }
 
 export function tone(freq, dur = 0.12, type = "sine", vol = 0.2, slide = 0) {
-  if (muted) return;
+  if (muted || !settings.sound || settings.volume <= 0) return;
+  vol *= settings.volume;
   try {
     audio ??= new (window.AudioContext || window.webkitAudioContext)();
     if (audio.state === "suspended") audio.resume();
@@ -62,8 +64,9 @@ export const sfx = {
 };
 
 export function say(text) {
-  if (muted || !("speechSynthesis" in window)) return;
+  if (muted || !settings.voice || settings.volume <= 0 || !("speechSynthesis" in window)) return;
   const u = new SpeechSynthesisUtterance(text);
+  u.volume = settings.volume;
   u.rate = 1.1;
   u.pitch = 1.4;
   speechSynthesis.cancel();
@@ -136,6 +139,7 @@ export function popup(text, x, y, color = "#fff", size = 42) {
   popups.push({ text, x, y, color, size, t: 0 });
 }
 export function burst(x, y, color, n = 14) {
+  if (settings.calm) n = Math.ceil(n / 3);
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, sp = rand(120, 380);
     particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.7, color });

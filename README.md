@@ -52,13 +52,16 @@ The website is published automatically to GitHub Pages by `.github/workflows/pag
 
 Opening `index.html` by double-clicking won't work, because browsers only allow the camera on `localhost` or `https` pages.
 
-### Hand tracking feels off?
-On each game's setup screen, pick **✋ Hands: 🐢 Steady / 🙂 Normal / ⚡ Quick**. Steady = calmest circles, Quick = least delay. The choice is remembered.
-During a game, press **D** to show the debug overlay (raw tracker points in red, camera fps, tracker speed).
+### Settings (⚙️ on the menu)
+Saved on each device: sound effects, talking voice, volume, hand circles (Steady / Normal / Quick),
+camera choice, mirror picture, show camera picture, game length (Short / Normal / Long),
+calm mode (no shaking, fewer sparkles), play without camera (touch/mouse), and tracking info
+(red dots show what the camera sees; **D** also toggles it on a keyboard).
 
 ### Code layout
 - `js/main.js` – menu, round flow (ready → countdown → play → results), HUD
 - `js/tracker.js` – camera + pose tracking; One Euro filter + deadband + glide for steady hands (3 presets)
 - `electron/` – Windows app wrapper and icon; `scripts/` – offline file prep and icon generator
 - `js/fx.js` – drawing, sounds, voice, particles
+- `js/settings.js` / `js/settings-ui.js` – saved settings and the Settings screen
 - `js/games/*.js` – one file per game; add a new game by copying one and listing it in `main.js`

@@ -1,6 +1,7 @@
 // Camera + body tracking (Google MediaPipe Pose Landmarker, free and runs locally).
 // Produces a `player` object in screen pixels with filtered, stable points.
 import { view } from "./fx.js";
+import { settings } from "./settings.js";
 
 // Prefer the copies bundled with the app (offline); fall back to the CDN for the plain web version.
 const LOCAL = new URL("../vendor/", import.meta.url).href;
@@ -46,8 +47,10 @@ export const STEADINESS = {
   normal: { minCutoff: 0.5, beta: 7, deadband: 0.065, renderTau: 0.012 },
   quick:  { minCutoff: 0.5, beta: 14, deadband: 0.05, renderTau: 0.012 },
 };
-let handTuning = STEADINESS.normal;
-export function setSteadiness(name) { handTuning = STEADINESS[name] ?? STEADINESS.normal; }
+// The hand preset comes from Settings; tests can override it with setSteadiness().
+let override = null;
+export function setSteadiness(name) { override = STEADINESS[name] ?? null; }
+const handTuning = () => override ?? STEADINESS[settings.hands] ?? STEADINESS.normal;
 
 // A tracked body point: visibility hysteresis, short hold-on-loss, glitch rejection,
 // One Euro smoothing + deadband, then a gentle glide at screen refresh rate.
@@ -65,7 +68,7 @@ class TrackedPoint {
     this.ok = false; this.fresh = true; this.lost = 0; this.good = 0; this.suspect = 0;
   }
 
-  get tune() { return this.hand ? handTuning : this.own; }
+  get tune() { return this.hand ? handTuning() : this.own; }
   predict() { return { x: this.tx, y: this.ty }; }
 
   // m = {x, y, vis} in px, t = frame time in seconds, scale = body size in px
@@ -172,7 +175,26 @@ let lastDetectAt = 0;
 // Live numbers for the debug overlay (press D in game).
 export const stats = { fps: 0, detectMs: 0, model: "", raw: [null, null] };
 
+let frameLoopStarted = false;
+
 export const hasCamera = () => camReady;
+
+// Cameras on this device (names show up after the camera has been allowed once).
+export async function listCameras() {
+  try {
+    // Before permission is granted, browsers hide camera IDs (""), and those can't be picked.
+    return (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput" && d.deviceId);
+  } catch {
+    return [];
+  }
+}
+
+// Stop the current camera so the next game opens the one picked in Settings.
+export function restartCamera() {
+  video.srcObject?.getTracks().forEach((t) => t.stop());
+  video.srcObject = null;
+  camReady = false;
+}
 
 async function loadVision() {
   let mod, base;
@@ -217,13 +239,19 @@ export async function initTracking(onStatus) {
   if (!camReady) {
     onStatus("Waking up the camera…");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        // Smaller frames at a higher frame rate = fresher, smoother tracking.
-        video: MOBILE
-          ? { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }
-          : { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 60 } },
-        audio: false,
-      });
+      // Smaller frames at a higher frame rate = fresher, smoother tracking.
+      const size = MOBILE
+        ? { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }
+        : { width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 60 } };
+      const which = settings.cameraId ? { deviceId: { exact: settings.cameraId } } : { facingMode: "user" };
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { ...which, ...size }, audio: false });
+      } catch (err) {
+        if (!settings.cameraId || err?.name === "NotAllowedError") throw err;
+        // The saved camera is unplugged: fall back to the default one.
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", ...size }, audio: false });
+      }
       video.srcObject = stream;
       await video.play();
       camReady = true;
@@ -261,6 +289,8 @@ export async function initTracking(onStatus) {
 
 // Run detection once per new camera frame (not once per screen refresh).
 function startFrameLoop() {
+  if (frameLoopStarted) return;
+  frameLoopStarted = true;
   if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
     const onFrame = (now) => { detect(now); video.requestVideoFrameCallback(onFrame); };
     video.requestVideoFrameCallback(onFrame);
@@ -297,8 +327,7 @@ function videoRect() {
 export function drawCamera(ctx) {
   const r = videoRect();
   ctx.save();
-  ctx.translate(r.x + r.w, r.y);
-  ctx.scale(-1, 1);
+  if (settings.mirror) { ctx.translate(r.x + r.w, r.y); ctx.scale(-1, 1); } else ctx.translate(r.x, r.y);
   ctx.drawImage(video, 0, 0, r.w, r.h);
   ctx.restore();
   ctx.fillStyle = "rgba(20, 12, 60, 0.35)";
@@ -339,7 +368,8 @@ function detect(nowMs) {
 
   const t = nowMs / 1000;
   const r = videoRect();
-  const at = (p) => ({ x: r.x + (1 - p.x) * r.w, y: r.y + p.y * r.h, vis: p.visibility ?? 1 });
+  const mx = settings.mirror ? (x) => 1 - x : (x) => x;
+  const at = (p) => ({ x: r.x + mx(p.x) * r.w, y: r.y + p.y * r.h, vis: p.visibility ?? 1 });
   const pt = (i) => (lm ? at(lm[i]) : null);
   // Hand centre ≈ wrist blended toward the knuckles (more natural than the bare wrist).
   const palm = (w, p, i) => {

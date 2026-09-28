@@ -31,6 +31,17 @@
     </div>
   </div>
 
+  <button class="gear" id="settingsBtn" aria-label="Settings" title="Settings">⚙️</button>
+
+  <!-- Settings -->
+  <section id="settings" class="screen hidden">
+    <button class="back" id="settingsBack" aria-label="Back">⬅</button>
+    <div class="settings">
+      <h2>⚙️ Settings</h2>
+      <div id="settingsBody"></div>
+    </div>
+  </section>
+
   <!-- Home: pick a game -->
   <section id="menu" class="screen">
     <header class="brand">
@@ -51,12 +62,6 @@
       <div class="setup-emoji" id="setupEmoji"></div>
       <h2 id="setupTitle"></h2>
       <div class="how" id="setupHow"></div>
-      <div class="steady" role="group" aria-label="Hand tracking">
-        <span>✋ Hands:</span>
-        <button data-steady="steady" aria-pressed="false">🐢 Steady</button>
-        <button data-steady="normal" aria-pressed="true">🙂 Normal</button>
-        <button data-steady="quick" aria-pressed="false">⚡ Quick</button>
-      </div>
       <div class="levels">
         <button class="level easy"   data-level="easy"><span>🐣</span>Easy</button>
         <button class="level medium" data-level="medium"><span>🐯</span>Medium</button>

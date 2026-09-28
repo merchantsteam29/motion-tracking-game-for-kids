@@ -1,7 +1,9 @@
 // Menu, round flow (ready → countdown → play → results), HUD and main loop.
 import { view, setCtx, ctx, sfx, say, setMuted, isMuted, clearEffects, updateEffects, drawEffects, bigText, pick, unlockAudio } from "./fx.js";
 import { registerServiceWorker } from "./config.js";
-import { player, initTracking, updateTracking, updateFromMouse, hasCamera, drawCamera, setSteadiness, stats } from "./tracker.js";
+import { player, initTracking, updateTracking, updateFromMouse, hasCamera, drawCamera, restartCamera, stats } from "./tracker.js";
+import { settings, onSettingsChange, GAME_LENGTH } from "./settings.js";
+import { buildSettings, refreshCameras } from "./settings-ui.js";
 import dodge from "./games/dodge.js";
 import bubbles from "./games/bubbles.js";
 import jacks from "./games/jacks.js";
@@ -25,27 +27,17 @@ const CHEERS = [
 const $ = (id) => document.getElementById(id);
 const canvas = $("stage");
 setCtx(canvas.getContext("2d"));
-const screens = { menu: $("menu"), setup: $("setup"), loading: $("loading"), end: $("end") };
+const screens = { menu: $("menu"), setup: $("setup"), settings: $("settings"), loading: $("loading"), end: $("end") };
 
 let mode = MODES[0];
 let levelName = "easy";
 let game = null;     // the running mini-game
 let session = null;  // shared round state
-let mouseMode = false;
-let debug = false;     // press D in game to show raw tracker points
+let mouseMode = settings.noCamera;
+let debug = false;     // press D in game to show raw tracker points (same as the Settings switch)
+let current = "menu";  // which screen is showing
+let beforeSettings = "menu";
 const mouse = { x: innerWidth / 2, y: innerHeight / 2, down: false, leg: 1 };
-
-// Hand steadiness preference (remembered on this device only).
-const store = {
-  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
-  set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
-};
-function applySteadiness(name) {
-  if (!["steady", "normal", "quick"].includes(name)) name = "normal";
-  setSteadiness(name);
-  store.set("hands", name);
-  document.querySelectorAll("[data-steady]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.steady === name)));
-}
 
 // ---------- Layout ----------
 function resize() {
@@ -60,8 +52,16 @@ addEventListener("resize", resize);
 resize();
 
 function show(name) {
+  current = name;
   for (const [k, el] of Object.entries(screens)) el.classList.toggle("hidden", k !== name);
   $("hud").classList.toggle("hidden", name !== null);
+  $("settingsBtn").classList.toggle("hidden", name !== "menu" && name !== "setup");
+}
+
+function openSettings() {
+  beforeSettings = current === "setup" ? "setup" : "menu";
+  show("settings");
+  refreshCameras();
 }
 
 // ---------- Menu ----------
@@ -93,7 +93,8 @@ async function start() {
     const res = await initTracking((msg) => ($("loadingText").textContent = msg));
     if (!res.ok) { showCamError(res.error); return; }
   }
-  const cfg = mode.levels[levelName];
+  const base = mode.levels[levelName];
+  const cfg = { ...base, time: Math.round(base.time * (GAME_LENGTH[settings.gameLength] ?? 1)) };
   clearEffects();
   player.baseY = null;
   game = mode.create(cfg);
@@ -188,7 +189,7 @@ const bgStars = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.r
 
 function drawBackground(now) {
   const { W, H } = view;
-  if (hasCamera() && !mouseMode && session && session.phase !== "over") { drawCamera(ctx); return; }
+  if (hasCamera() && !mouseMode && settings.showCamera && session && session.phase !== "over") { drawCamera(ctx); return; }
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, "#0f0a2a");
   g.addColorStop(1, "#2a1757");
@@ -207,7 +208,7 @@ function drawBackground(now) {
 function draw(now) {
   const { W, H } = view;
   ctx.save();
-  if (game?.shake > 0) {
+  if (game?.shake > 0 && !settings.calm) {
     const m = game.shake * 30;
     ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
   }
@@ -228,7 +229,7 @@ function draw(now) {
       bigText(String(Math.ceil(session.countdown)), W / 2, H / 2, 160 * (1 + (session.countdown % 1) * 0.5), "#ffe066");
     }
 
-    if (debug) drawDebug();
+    if (debug || settings.debug) drawDebug();
     $("hudScore").textContent = `⭐ ${game.score}`;
     $("hudTime").textContent = `⏱ ${Math.max(0, Math.ceil(session.timeLeft))}`;
   }
@@ -266,11 +267,19 @@ $("setupBack").addEventListener("click", toMenu);
 $("againBtn").addEventListener("click", () => { unlockAudio(); start(); });
 $("menuBtn").addEventListener("click", toMenu);
 addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && !$("setup").classList.contains("hidden")) toMenu();
-  if (e.key === "d" || e.key === "D") debug = !debug;
+  if (e.key === "Escape" && current === "settings") show(beforeSettings);
+  else if (e.key === "Escape" && current === "setup") toMenu();
+  if ((e.key === "d" || e.key === "D") && e.target === document.body) debug = !debug;
 });
-document.querySelectorAll("[data-steady]").forEach((b) => b.addEventListener("click", () => applySteadiness(b.dataset.steady)));
-applySteadiness(store.get("hands"));
+
+// Settings
+buildSettings($("settingsBody"));
+$("settingsBtn").addEventListener("click", openSettings);
+$("settingsBack").addEventListener("click", () => show(beforeSettings));
+onSettingsChange((key) => {
+  if (key === "cameraId") restartCamera();
+  if (key === "noCamera" || key === null) mouseMode = settings.noCamera;
+});
 $("backBtn").addEventListener("click", toSetup);
 $("quitBtn").addEventListener("click", () => { if (session && session.phase !== "over") endGame(); });
 $("mouseModeBtn").addEventListener("click", () => { unlockAudio(); mouseMode = true; start(); });
