@@ -27,9 +27,9 @@ export default {
   mouse: "head", // mouse button = arms up + feet apart
   levels: {
     // spread = how much wider (in shoulder-widths) the feet must go than when standing
-    easy:   { time: 45, goal: 10, upAtHead: false, downBelow: 0.25, spread: 0.35 },
-    medium: { time: 60, goal: 25, upAtHead: true,  downBelow: 0.45, spread: 0.5 },
-    hard:   { time: 60, goal: 40, upAtHead: true,  downBelow: 0.6,  spread: 0.65 },
+    easy:   { time: 45, goal: 8,  upAtHead: false, downBelow: 0.1,  spread: 0.2,  legsOptional: true },
+    medium: { time: 60, goal: 18, upAtHead: false, downBelow: 0.25, spread: 0.3,  legsOptional: true },
+    hard:   { time: 60, goal: 30, upAtHead: true,  downBelow: 0.4,  spread: 0.45, legsOptional: false },
   },
   create: (cfg) => new Jacks({ ...cfg, spread: cfg.spread * body.legs }),
 };
@@ -87,7 +87,8 @@ class Jacks {
       this.rest[leg.src] = rest;
       st.legs = leg.v > rest + leg.need ? "open" : leg.v < rest + leg.need * 0.4 ? "closed" : "mid";
     } else {
-      st.legs = "?";
+      // Easy/Medium: if the camera can't see the legs, arms alone still count.
+      st.legs = this.cfg.legsOptional ? (st.arms === "up" ? "open" : st.arms === "down" ? "closed" : "mid") : "?";
     }
 
     if (this.state === "down" && st.arms === "up" && st.legs === "open") {
@@ -127,7 +128,7 @@ class Jacks {
   cue() {
     const st = this.status;
     if (player.finger) return this.state === "down" ? ["👆 Tap for a jumping jack!", "#ffe066"] : ["⬇️ Now let go!", "#9dffb0"];
-    if (!st.legsSeen) return ["🦶 Step back so I can see your feet!", "#ffb3c1"];
+    if (!st.legsSeen && !this.cfg.legsOptional) return ["🦶 Step back so I can see your feet!", "#ffb3c1"];
     if (!st.handsSeen) return ["✋ Show both hands!", "#ffb3c1"];
     if (this.state === "down") {
       if (st.arms === "up" && st.legs !== "open") return ["🦘 Jump your feet out too!", "#ffe066"];

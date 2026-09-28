@@ -2,7 +2,8 @@
 const KEY = "moveplay-settings";
 
 export const DEFAULTS = {
-  age: 0,               // player's age (0 = not set); used for average height and body proportions
+  height: 0,            // player's height in cm (0 = not set); sizes the moves and how far back to stand
+  heightUnit: "ft",     // show height in "ft" (feet + inches) or "cm"
   sound: true,          // sound effects + music
   voice: true,          // spoken counts and tips
   volume: 0.8,          // 0..1
@@ -18,7 +19,11 @@ export const DEFAULTS = {
 
 export const GAME_LENGTH = { short: 0.6, normal: 1, long: 1.5 };
 
-const CHOICES = { hands: ["steady", "normal", "quick"], gameLength: Object.keys(GAME_LENGTH) };
+const CHOICES = { hands: ["steady", "normal", "quick"], gameLength: Object.keys(GAME_LENGTH), heightUnit: ["ft", "cm"] };
+export const HEIGHT_MIN = 80, HEIGHT_MAX = 210; // cm
+
+// Older versions saved an age instead of a height: convert it to that age's average height.
+const AGE_HEIGHT = { 3: 96, 4: 103, 5: 110, 6: 116, 7: 122, 8: 128, 9: 133, 10: 139, 11: 144, 12: 150, 13: 157, 14: 163, 15: 167, 16: 170 };
 
 // Only keep saved values that still make sense (right type, allowed choice, in range).
 function clean(saved) {
@@ -28,7 +33,7 @@ function clean(saved) {
     if (typeof v !== typeof def) continue;
     if (CHOICES[k] && !CHOICES[k].includes(v)) continue;
     if (k === "volume" && !(v >= 0 && v <= 1)) continue;
-    if (k === "age" && !(v === 0 || (Number.isInteger(v) && v >= 3 && v <= 16))) continue;
+    if (k === "height" && !(v === 0 || (v >= HEIGHT_MIN && v <= HEIGHT_MAX))) continue;
     out[k] = v;
   }
   return out;
@@ -37,7 +42,10 @@ function clean(saved) {
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || "null");
-    if (saved && typeof saved === "object") return clean(saved);
+    if (saved && typeof saved === "object") {
+      if (!saved.height && AGE_HEIGHT[saved.age]) saved.height = AGE_HEIGHT[saved.age];
+      return clean(saved);
+    }
     const oldHands = localStorage.getItem("hands"); // from before the settings screen existed
     return oldHands ? clean({ hands: oldHands }) : {};
   } catch {

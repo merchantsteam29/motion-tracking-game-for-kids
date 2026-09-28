@@ -22,9 +22,9 @@ export default {
   stars: [15, 30, 45], // scores for 1, 2, 3 stars per minute of play
   mouse: "hand",
   levels: {
-    easy:   { time: 60, count: 1, gravity: 0.11, maxFall: 0.2,  bounce: 0.55, size: 0.08 },
-    medium: { time: 75, count: 2, gravity: 0.15, maxFall: 0.26, bounce: 0.6,  size: 0.07 },
-    hard:   { time: 90, count: 3, gravity: 0.19, maxFall: 0.32, bounce: 0.65, size: 0.065 },
+    easy:   { time: 60, count: 1, gravity: 0.07, maxFall: 0.13, bounce: 0.5,  size: 0.095 },
+    medium: { time: 75, count: 2, gravity: 0.1,  maxFall: 0.18, bounce: 0.55, size: 0.085 },
+    hard:   { time: 90, count: 2, gravity: 0.14, maxFall: 0.24, bounce: 0.6,  size: 0.075 },
   },
   create: (cfg) => new BalloonBop(cfg),
 };
@@ -66,7 +66,7 @@ class BalloonBop {
       if (b.x > W - b.r) { b.x = W - b.r; b.vx = -Math.abs(b.vx) * 0.7; }
       if (b.y < b.r + 70 && b.vy < 0) b.vy = Math.abs(b.vy) * 0.3;
 
-      const hand = b.cool <= 0 && hands.find((h) => Math.hypot(h.x - b.x, h.y - b.y) < b.r + s * 0.3);
+      const hand = b.cool <= 0 && hands.find((h) => Math.hypot(h.x - b.x, h.y - b.y) < b.r + s * 0.45);
       if (hand) {
         b.cool = 0.3;
         b.vy = -H * cfg.bounce * rand(0.9, 1.1) + Math.min(0, hand.vy) * 0.25;

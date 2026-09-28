@@ -25,9 +25,9 @@ export default {
   mouse: "head", // each click lifts the next knee
   levels: {
     // lift = how high the knee must come up (shoulder-widths), rival = rival speed (steps per second)
-    easy:   { time: 60, lift: 0.3,  track: 30, rival: 1.3, rivalEmoji: "🐢" },
-    medium: { time: 75, lift: 0.4,  track: 40, rival: 1.9, rivalEmoji: "🐶" },
-    hard:   { time: 90, lift: 0.5,  track: 50, rival: 2.5, rivalEmoji: "🐆" },
+    easy:   { time: 60, lift: 0.18, track: 24, rival: 1.0, rivalEmoji: "🐢" },
+    medium: { time: 75, lift: 0.26, track: 32, rival: 1.5, rivalEmoji: "🐶" },
+    hard:   { time: 90, lift: 0.36, track: 42, rival: 2.1, rivalEmoji: "🐆" },
   },
   create: (cfg) => new HighKnees({ ...cfg, lift: cfg.lift * body.legs }),
 };
@@ -75,7 +75,7 @@ class HighKnees {
       if (!this.up[i] && lift > this.cfg.lift) {
         this.up[i] = true;
         // Count it if it's the other leg (or a fresh start) — alternating steps.
-        if (this.lastLeg !== i || this.t - this.lastStepT > 0.9) this.step(i);
+        if (this.lastLeg !== i || this.t - this.lastStepT > 0.6) this.step(i);
       } else if (this.up[i] && lift < this.cfg.lift * 0.4) {
         this.up[i] = false;
       }

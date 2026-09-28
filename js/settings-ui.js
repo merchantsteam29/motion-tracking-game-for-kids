@@ -1,11 +1,12 @@
 // Builds the Settings screen from a simple list and keeps it in sync with the saved settings.
-import { settings, setSetting, resetSettings, onSettingsChange } from "./settings.js";
+import { settings, setSetting, resetSettings, onSettingsChange, HEIGHT_MIN, HEIGHT_MAX } from "./settings.js";
 import { listCameras } from "./tracker.js";
-import { body, formatHeight, formatDistance, ageLabel } from "./profile.js";
+import { body, formatDistance, heightLabel } from "./profile.js";
 
 const SCHEMA = [
   { group: "🧒 Player", items: [
-    { key: "age", label: "Age", hint: "", type: "age" },
+    { key: "height", label: "📏 Height", hint: "", type: "height" },
+    { key: "heightUnit", label: "Height in", type: "choice", options: [["ft", "feet"], ["cm", "cm"]] },
   ] },
   { group: "🎮 Play", items: [
     { key: "noCamera", label: "👆 Finger mode", hint: "Play by touching the screen, no camera needed", type: "switch" },
@@ -42,11 +43,11 @@ function control(item) {
     case "choice":
       return `<div class="seg" role="radiogroup" aria-labelledby="${id}-label">${item.options.map(([v, t]) =>
         `<button role="radio" data-key="${item.key}" data-value="${v}">${t}</button>`).join("")}</div>`;
-    case "age":
+    case "height":
       return `<div class="stepper" role="group" aria-labelledby="${id}-label">
-        <button data-step="-1" aria-label="Younger">−</button>
-        <output id="ageValue" aria-live="polite"></output>
-        <button data-step="1" aria-label="Older">+</button>
+        <button data-step="-1" aria-label="Shorter">−</button>
+        <output id="heightValue" aria-live="polite"></output>
+        <button data-step="1" aria-label="Taller">+</button>
       </div>`;
     case "camera":
       return `<select id="${id}" data-key="${item.key}" aria-labelledby="${id}-label"><option value="">Default camera</option></select>`;
@@ -63,12 +64,13 @@ export function buildSettings(container) {
         <div class="set-row">
           <div class="set-text">
             <span class="set-label" id="set-${it.key}-label">${it.label}</span>
-            ${it.type === "age" ? `<span class="set-hint" id="ageHint"></span>` : it.hint ? `<span class="set-hint">${it.hint}</span>` : ""}
+            ${it.type === "height" ? `<span class="set-hint" id="heightHint"></span>` : it.hint ? `<span class="set-hint">${it.hint}</span>` : ""}
           </div>
           ${control(it)}
         </div>`).join("")}
     </section>`).join("") + `
     <div class="set-actions">
+      <button class="btn" id="settingsDone">✓ Done</button>
       <button class="btn ghost" id="resetSettings">↺ Reset to default</button>
     </div>
     <p class="footnote">Settings are saved on this device.</p>`;
@@ -81,13 +83,25 @@ export function buildSettings(container) {
     b.addEventListener("click", () => setSetting(b.dataset.key, b.dataset.value)));
   root.querySelectorAll("select").forEach((s) =>
     s.addEventListener("change", () => setSetting(s.dataset.key, s.value)));
-  root.querySelectorAll(".stepper button").forEach((b) => b.addEventListener("click", () => {
-    const step = Number(b.dataset.step), age = settings.age;
-    // From "Not set", + picks 6 and − does nothing; going below 3 clears it again.
-    if (age === 0 && step < 0) return;
-    const next = age === 0 ? 6 : age === 3 && step < 0 ? 0 : Math.min(16, Math.max(3, age + step));
-    setSetting("age", next);
-  }));
+  // Height stepper: one inch (or 1 cm) per tap; hold the button to go faster.
+  const stepHeight = (dir) => {
+    const cm = settings.height, step = settings.heightUnit === "cm" ? 1 : 2.54;
+    if (!cm) { if (dir > 0) setSetting("height", 120); return; } // first tap: about 4 ft
+    const next = cm + dir * step;
+    setSetting("height", next < HEIGHT_MIN ? 0 : Math.min(HEIGHT_MAX, Math.round(next * 100) / 100));
+  };
+  root.querySelectorAll(".stepper button").forEach((btn) => {
+    let hold = null, repeat = null;
+    const stop = () => { clearTimeout(hold); clearInterval(repeat); hold = repeat = null; };
+    btn.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      const dir = Number(btn.dataset.step);
+      stepHeight(dir);
+      hold = setTimeout(() => (repeat = setInterval(() => stepHeight(dir), 70)), 400);
+    });
+    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, stop));
+    btn.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); stepHeight(Number(btn.dataset.step)); } });
+  });
   root.querySelector("#resetSettings").addEventListener("click", resetSettings);
 
   onSettingsChange(sync);
@@ -102,12 +116,12 @@ function sync() {
   root.querySelectorAll(".seg button").forEach((b) =>
     b.setAttribute("aria-checked", String(settings[b.dataset.key] === b.dataset.value)));
   root.querySelectorAll("select").forEach((s) => (s.value = settings[s.dataset.key]));
-  const ageValue = root.querySelector("#ageValue");
-  if (ageValue) {
-    ageValue.textContent = ageLabel();
-    root.querySelector("#ageHint").textContent = body.known
-      ? `Average height ${formatHeight(body.heightCm)} · stand about ${formatDistance(body.standM)} back`
-      : "Set it so the games fit your size better";
+  const heightValue = root.querySelector("#heightValue");
+  if (heightValue) {
+    heightValue.textContent = heightLabel();
+    root.querySelector("#heightHint").textContent = body.known
+      ? `Stand about ${formatDistance(body.standM)} from the camera`
+      : "Set your height so the games fit your size";
   }
 }
 

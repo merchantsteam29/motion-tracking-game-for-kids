@@ -30,9 +30,9 @@ export default {
   mouse: "head",
   levels: {
     // period = seconds per swing, jump = how high the head must rise (shoulder-widths)
-    easy:   { time: 45, period: 1.7,  jump: 0.18 },
-    medium: { time: 60, period: 1.25, jump: 0.24 },
-    hard:   { time: 60, period: 0.95, jump: 0.3 },
+    easy:   { time: 45, period: 2.1,  jump: 0.1 },
+    medium: { time: 60, period: 1.6,  jump: 0.14 },
+    hard:   { time: 60, period: 1.2,  jump: 0.2 },
   },
   create: (cfg) => new JumpRope({ ...cfg, jump: cfg.jump * body.legs }),
 };
@@ -49,14 +49,18 @@ class JumpRope {
     this.t = 0;
   }
 
-  // Hold the standing height steady: jumping shouldn't move the baseline.
-  get holdBaseline() { return true; }
+  // Re-learn the standing height only while the rope is up high (never mid-jump),
+  // so moving closer to or further from the camera doesn't break jumping.
+  get holdBaseline() { return !(this.phase > 0.8 || this.phase < 0.15) || this.air < 0.3; }
 
   onTap() { this.lastTap = this.t; }
 
   inAir() {
-    if (player.finger) return this.t - this.lastTap < 0.35;
-    return player.head.y < player.baseY - this.cfg.jump * player.scale;
+    if (player.finger) return this.t - this.lastTap < 0.45;
+    // Up high enough, or moving up fast (a quick little hop counts too).
+    const high = player.head.y < player.baseY - this.cfg.jump * player.scale;
+    const hopping = player.head.vy < -player.scale * 1.2;
+    return high || hopping;
   }
 
   update(dt) {
@@ -71,7 +75,7 @@ class JumpRope {
     // Judge the swing just after the rope passes the feet (allow a jump a moment early).
     if (!this.checked && this.phase >= 0.55) {
       this.checked = true;
-      if (this.air < 0.25) {
+      if (this.air < 0.45) {
         this.cleared++;
         this.streak++;
         this.best = Math.max(this.best, this.streak);

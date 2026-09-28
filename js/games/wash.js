@@ -33,9 +33,9 @@ export default {
   mouse: "hand",
   levels: {
     // brush = sponge size (shoulder-widths), done = share to clean, splat = seconds between new mud splats (0 = none)
-    easy:   { time: 60, brush: 0.75, done: 0.85, splat: 0 },
-    medium: { time: 75, brush: 0.6,  done: 0.9,  splat: 4 },
-    hard:   { time: 90, brush: 0.5,  done: 0.93, splat: 2.5 },
+    easy:   { time: 60, brush: 1.0,  done: 0.8,  splat: 0 },
+    medium: { time: 75, brush: 0.8,  done: 0.85, splat: 6 },
+    hard:   { time: 90, brush: 0.65, done: 0.9,  splat: 4 },
   },
   create: (cfg) => new WindowWash(cfg),
 };

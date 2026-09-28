@@ -118,6 +118,7 @@ h2 { margin: 0; font-size: clamp(34px, 5vw, 52px); font-weight: 800; line-height
 
 .back {
   position: fixed;
+  z-index: 10; /* always tappable, even when the page scrolls under it on phones */
   top: max(16px, env(safe-area-inset-top));
   left: max(16px, env(safe-area-inset-left));
   width: 56px;
@@ -555,7 +556,7 @@ body.page {
 .level { position: relative; }
 .level.recommended { box-shadow: 0 6px 0 rgba(0, 0, 0, 0.25), 0 0 0 4px #ffd84d; }
 .level.recommended::after {
-  content: "👍 For your age";
+  content: "👍 Good for you";
   position: absolute;
   top: -14px;
   left: 50%;

@@ -123,12 +123,39 @@ export function drawPlayer(p, now, { hurt = false, showHead = true } = {}) {
   for (const h of p.hands) {
     if (!h.ok) continue;
     ctx.globalAlpha = h.alpha;
-    circle(h.x, h.y, s * 0.3, "rgba(120, 255, 220, 0.3)", "#7fffe0", 4);
-    circle(h.x, h.y, s * 0.07, "#7fffe0");
+    if (h.shape && !p.finger) drawHandShape(h, s);
+    else {
+      circle(h.x, h.y, s * 0.3, "rgba(120, 255, 220, 0.3)", "#7fffe0", 4);
+      circle(h.x, h.y, s * 0.07, "#7fffe0");
+    }
   }
   ctx.globalAlpha = 1;
   if (showHead && !(hurt && Math.floor(now / 100) % 2 === 0)) {
     circle(p.head.x, p.head.y, s * 0.42, null, hurt ? "#ff8fa3" : "#ffffff", 6);
+  }
+}
+
+// The player's real hand: bones and joints from the hand tracker, following the smoothed palm.
+const BONES = [[0, 1], [1, 2], [2, 3], [3, 4], [0, 5], [5, 6], [6, 7], [7, 8], [5, 9], [9, 10], [10, 11], [11, 12],
+  [9, 13], [13, 14], [14, 15], [15, 16], [13, 17], [0, 17], [17, 18], [18, 19], [19, 20]];
+const TIPS = [4, 8, 12, 16, 20];
+function drawHandShape(h, s) {
+  const pt = (i) => ({ x: h.x + h.shape[i].x, y: h.y + h.shape[i].y });
+  const size = Math.max(8, h.handSize || s * 0.3);
+  // Soft glow behind the palm so the hand reads clearly on busy backgrounds.
+  circle(h.x, h.y, size * 0.9, "rgba(120, 255, 220, 0.18)");
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "rgba(20, 60, 60, 0.55)";
+  ctx.lineWidth = Math.max(5, size * 0.22);
+  ctx.beginPath();
+  for (const [a, b] of BONES) { const p = pt(a), q = pt(b); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); }
+  ctx.stroke();
+  ctx.strokeStyle = "#7fffe0";
+  ctx.lineWidth = Math.max(3, size * 0.12);
+  ctx.stroke();
+  for (let i = 0; i < 21; i++) {
+    const p = pt(i);
+    circle(p.x, p.y, TIPS.includes(i) ? Math.max(4, size * 0.13) : Math.max(2.5, size * 0.07), TIPS.includes(i) ? "#ffffff" : "#7fffe0");
   }
 }
 

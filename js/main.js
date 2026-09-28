@@ -4,7 +4,7 @@ import { registerServiceWorker } from "./config.js";
 import { player, initTracking, updateTracking, updateFromMouse, hasCamera, drawCamera, restartCamera, stats } from "./tracker.js";
 import { settings, onSettingsChange, GAME_LENGTH } from "./settings.js";
 import { buildSettings, refreshCameras } from "./settings-ui.js";
-import { body, formatDistance, ageLabel } from "./profile.js";
+import { body, formatDistance, heightLabel } from "./profile.js";
 import { starsFor, getBest, bestStars, recordResult } from "./progress.js";
 import dodge from "./games/dodge.js";
 import bubbles from "./games/bubbles.js";
@@ -114,8 +114,8 @@ function refreshSetup() {
   $("setupInfo").textContent = finger
     ? "👆 Finger mode is on: no camera needed"
     : body.known
-      ? `🧒 Age ${ageLabel()} · stand about ${formatDistance(body.standM)} from the camera`
-      : "🧒 Set your age in ⚙️ Settings so the game fits your size";
+      ? `📏 ${heightLabel()} tall · stand about ${formatDistance(body.standM)} from the camera`
+      : "📏 Set your height in ⚙️ Settings so the game fits your size";
   const bests = LEVELS.map((l) => [l, getBest(m.id, l)]).filter(([, b]) => b);
   $("setupBest").innerHTML = bests.length
     ? "🏆 Best: " + bests.map(([l, b]) => `${LEVEL_NAMES[l]} ${b.score} <span class="mini-stars">${starRow(b.stars)}</span>`).join(" · ")
@@ -480,6 +480,7 @@ addEventListener("keydown", (e) => {
 buildSettings($("settingsBody"));
 $("settingsBtn").addEventListener("click", openSettings);
 $("settingsBack").addEventListener("click", () => show(beforeSettings));
+$("settingsDone").addEventListener("click", () => show(beforeSettings));
 const applyCalm = () => document.body.classList.toggle("calm", settings.calm);
 applyCalm();
 onSettingsChange((key) => {

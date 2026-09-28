@@ -23,9 +23,9 @@ export default {
   stars: [20, 40, 60], // scores for 1, 2, 3 stars per minute of play
   mouse: "hand",
   levels: {
-    easy:   { time: 60, every: 0.65, speed: 0.12, size: 0.075, gold: 0.12, spread: 3.5 },
-    medium: { time: 60, every: 0.5,  speed: 0.18, size: 0.062, gold: 0.14, spread: 4.2 },
-    hard:   { time: 75, every: 0.38, speed: 0.25, size: 0.052, gold: 0.16, spread: 5.0 },
+    easy:   { time: 60, every: 0.7,  speed: 0.09, size: 0.085, gold: 0.12, spread: 3.0 },
+    medium: { time: 60, every: 0.55, speed: 0.13, size: 0.072, gold: 0.14, spread: 3.6 },
+    hard:   { time: 75, every: 0.42, speed: 0.19, size: 0.06,  gold: 0.16, spread: 4.2 },
   },
   create: (cfg) => new Bubbles({ ...cfg, spread: cfg.spread * body.reach }),
 };
@@ -50,7 +50,7 @@ class Bubbles {
       const r = unit * cfg.size * rand(0.8, 1.3) * (gold ? 0.85 : 1);
       const x = clamp(player.head.x + rand(-0.5, 0.5) * s * cfg.spread, r, W - r);
       this.list.push(gold
-        ? { x, y: clamp(player.head.y - s * rand(0.6, 1.5), r + 80, H * 0.6), r, vy: 0, gold, hue: 48, age: 0, life: 3.5, ph: rand(0, 6) }
+        ? { x, y: clamp(player.head.y - s * rand(0.6, 1.5), r + 80, H * 0.6), r, vy: 0, gold, hue: 48, age: 0, life: 4.5, ph: rand(0, 6) }
         : { x, y: H + r, r, vy: -H * cfg.speed * rand(0.8, 1.2), gold, hue: rand(160, 330), age: 0, life: 99, ph: rand(0, 6) });
     }
 
@@ -60,7 +60,7 @@ class Bubbles {
       b.age += dt;
       b.y += b.vy * dt;
       b.x += Math.sin(this.t * 2 + b.ph) * 25 * dt;
-      if (hands.some((h) => Math.hypot(h.x - b.x, h.y - b.y) < b.r + s * 0.3)) {
+      if (hands.some((h) => Math.hypot(h.x - b.x, h.y - b.y) < b.r + s * 0.45)) {
         this.pop(b);
         this.list.splice(i, 1);
       } else if (b.y < -b.r || b.age > b.life) {

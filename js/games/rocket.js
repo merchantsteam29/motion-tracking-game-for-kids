@@ -34,9 +34,9 @@ export default {
   mouse: "head",
   levels: {
     // depth = how far the head drops (shoulder-widths), goal = squats to reach the Moon, per = squats per stop
-    easy:   { time: 45, depth: 0.55, goal: 9,  per: 3 },
-    medium: { time: 60, depth: 0.75, goal: 15, per: 5 },
-    hard:   { time: 60, depth: 0.95, goal: 21, per: 7 },
+    easy:   { time: 45, depth: 0.35, goal: 9,  per: 3 },
+    medium: { time: 60, depth: 0.5,  goal: 12, per: 4 },
+    hard:   { time: 60, depth: 0.7,  goal: 18, per: 6 },
   },
   create: (cfg) => new MoonSquats({ ...cfg, depth: cfg.depth * body.legs }),
 };

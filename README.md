@@ -32,8 +32,8 @@ npm install
 npm run dist
 ```
 
-- `dist/Move-and-Play-Setup-1.6.0.exe`: installer with Start menu and desktop shortcuts
-- `dist/Move-and-Play-Portable-1.6.0.exe`: runs without installing (good for a USB stick)
+- `dist/Move-and-Play-Setup-1.7.0.exe`: installer with Start menu and desktop shortcuts
+- `dist/Move-and-Play-Portable-1.7.0.exe`: runs without installing (good for a USB stick)
 
 The app works fully offline (tracker, AI models and font are bundled). Press **F11** for fullscreen.
 The .exe isn't code-signed, so Windows SmartScreen may say "Windows protected your PC": click **More info → Run anyway**.
@@ -59,8 +59,8 @@ Opening `index.html` by double-clicking won't work, because browsers only allow 
 
 ### Settings (⚙️ on the menu)
 Saved on each device:
-- **🧒 Age**: uses average height and body proportions for that age, so targets, squats, knee lifts
-  and jumping-jack feet fit the player; shows how far back to stand and recommends a level
+- **📏 Height** (feet/inches or cm): sizes targets, squats, knee lifts and jumping-jack feet to the player's
+  build, shows how far back to stand, and recommends a level
 - **👆 Finger mode**: play every game by touching the screen, no camera (two fingers = two hands)
 - Game length, calm mode, sound effects, talking voice, volume, hand circles (Steady / Normal / Quick),
   camera choice, mirror picture, show camera picture, tracking info (**D** also toggles it)
@@ -77,6 +77,6 @@ Pause any time with ⏸ (or **P** / **Esc**); switching apps pauses automaticall
 - `electron/` – Windows app wrapper and icon; `scripts/` – offline file prep and icon generator
 - `js/fx.js` – drawing, sounds, voice, particles
 - `js/settings.js` / `js/settings-ui.js` – saved settings and the Settings screen
-- `js/profile.js` – age → average height, body proportions, stand distance
+- `js/profile.js` – height → body proportions, stand distance, suggested level
 - `js/progress.js` – star ratings and personal bests
 - `js/games/*.js` – one file per game; add a new game by copying one and listing it in `main.js`

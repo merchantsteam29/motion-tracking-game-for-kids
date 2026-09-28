@@ -29,9 +29,9 @@ export default {
   mouse: "head",
   levels: {
     // speed = screen heights per second, gap = gate width (share of screen), gain = how far the skier moves per step
-    easy:   { time: 60, speed: 0.22, gateEvery: 2.3, gap: 0.36, trees: 0.35, gain: 2.2 },
-    medium: { time: 75, speed: 0.3,  gateEvery: 1.8, gap: 0.28, trees: 0.55, gain: 2.2 },
-    hard:   { time: 90, speed: 0.4,  gateEvery: 1.4, gap: 0.22, trees: 0.75, gain: 2.2 },
+    easy:   { time: 60, speed: 0.15, gateEvery: 2.6, gap: 0.46, trees: 0.15, gain: 2.8 },
+    medium: { time: 75, speed: 0.21, gateEvery: 2.1, gap: 0.37, trees: 0.3,  gain: 2.8 },
+    hard:   { time: 90, speed: 0.29, gateEvery: 1.7, gap: 0.29, trees: 0.5,  gain: 2.8 },
   },
   create: (cfg) => new Ski({ ...cfg, gain: cfg.gain / body.reach }),
 };
@@ -102,7 +102,7 @@ class Ski {
           popup("Missed the gate!", this.x, sy - 50, "#ffb3c1", 34);
         }
       }
-      if (o.kind === "tree" && !o.hit && Math.hypot(o.x - this.x, o.y - sy) < o.r + Math.min(view.W, view.H) * 0.03) {
+      if (o.kind === "tree" && !o.hit && Math.hypot(o.x - this.x, o.y - sy) < o.r * 0.8 + Math.min(view.W, view.H) * 0.015) {
         o.hit = true;
         this.bumps++;
         this.streak = 0;

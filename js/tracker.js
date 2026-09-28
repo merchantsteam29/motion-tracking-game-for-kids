@@ -392,6 +392,8 @@ function refreshVisibility(dt) {
 export function updateTracking(dt) {
   const now = performance.now() / 1000;
   for (const p of allPoints()) p.render(now);
+  // Drop a hand's finger shape if it hasn't been seen for a moment (e.g. the camera paused).
+  player.hands.forEach((h, i) => { if (h.shape && performance.now() - (handFix[i].shapeAt ?? 0) > 400) h.shape = null; });
   refreshVisibility(dt);
 }
 
@@ -419,7 +421,13 @@ function refineHands(rough, lm) {
       return;
     }
     if (!which.includes(i)) return; // skipped this frame to save time; keep the last correction
-    const sx = clamp(p.x * vw - size / 2, 0, vw - size), sy = clamp(p.y * vh - size / 2, 0, vh - size);
+    // Centre the zoom box on our best guess (rough spot + last correction), so fast hands stay inside it.
+    // The box only moves when the hand drifts well away from its centre; moving it every frame would
+    // feed back into the result and make the circle wander.
+    const gx = p.x + (fix.seen ? fix.dx : 0), gy = p.y + (fix.seen ? fix.dy : 0);
+    const off = fix.box ? Math.hypot((gx - fix.box.x) * vw, (gy - fix.box.y) * vh) : Infinity;
+    if (!fix.seen || off > size * 0.18) fix.box = { x: gx, y: gy };
+    const sx = clamp(fix.box.x * vw - size / 2, 0, vw - size), sy = clamp(fix.box.y * vh - size / 2, 0, vh - size);
     const started = performance.now();
     cropCtx.drawImage(video, sx, sy, size, size, 0, 0, CROP, CROP);
     let res = null;
@@ -427,7 +435,7 @@ function refineHands(rough, lm) {
     handMs = handMs * 0.9 + (performance.now() - started) * 0.1;
     stats.handMs = handMs;
     // Of the hands found in the crop, take the one nearest the rough spot.
-    const found = pickHand(res, (p.x * vw - sx) / size, (p.y * vh - sy) / size, 0.5);
+    const found = pickHand(res, (gx * vw - sx) / size, (gy * vh - sy) / size, 0.5);
     if (found) {
       const nx = (sx + found.x * size) / vw, ny = (sy + found.y * size) / vh;
       const k = fix.seen ? 0.35 : 1; // first sighting snaps; after that blend gently so it doesn't twitch
@@ -436,6 +444,8 @@ function refineHands(rough, lm) {
       fix.seen = true;
       fix.miss = 0;
       fix.now = { x: nx, y: ny }; // exact spot this frame
+      fix.shape = found.lm.map((q) => ({ x: (sx + q.x * size) / vw, y: (sy + q.y * size) / vh }));
+      fix.shapeAt = performance.now();
       p.visibility = Math.max(p.visibility, 0.9); // the hand tracker is sure it's there
     } else if (++fix.miss > 3) {
       // The hand tracker keeps missing: ease back to the body tracker's guess.
@@ -452,7 +462,7 @@ export function pickHand(res, cx, cy, maxDist = 0.45) {
   for (const h of res?.landmarks ?? []) {
     const c = [0, 5, 9, 13, 17].reduce((acc, k) => ({ x: acc.x + h[k].x / 5, y: acc.y + h[k].y / 5 }), { x: 0, y: 0 });
     const dd = Math.hypot(c.x - cx, c.y - cy);
-    if (dd < bestD) { bestD = dd; best = c; }
+    if (dd < bestD) { bestD = dd; best = { x: c.x, y: c.y, lm: h }; }
   }
   return best;
 }
@@ -542,6 +552,15 @@ function detect(nowMs) {
   stats.raw = [hA, hB];
   t0.update(hA, t, s);
   t1.update(hB, t, s);
+  // Real hand shape (fingers) for drawing, as offsets from the palm centre in screen px.
+  [t0, t1].forEach((tp, i) => {
+    const f = handFix[i];
+    if (!f.shape || performance.now() - f.shapeAt > 400) { tp.shape = null; return; }
+    const pts = f.shape.map(at);
+    const c = [0, 5, 9, 13, 17].reduce((acc, k) => ({ x: acc.x + pts[k].x / 5, y: acc.y + pts[k].y / 5 }), { x: 0, y: 0 });
+    tp.shape = pts.map((q) => ({ x: q.x - c.x, y: q.y - c.y }));
+    tp.handSize = Math.hypot(pts[0].x - pts[9].x, pts[0].y - pts[9].y); // wrist to middle knuckle
+  });
 }
 
 // ---------- Finger mode / mouse ("head" = pointer moves you, "hand" = each finger is a hand) ----------
