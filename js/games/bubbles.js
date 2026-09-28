@@ -6,11 +6,12 @@ export default {
   id: "bubbles",
   title: "Bubble Pop",
   emoji: "🫧",
+  color: "#4dc9ff",
   blurb: "Pop bubbles with your hands!",
   how: [
-    ["✋", "Pop the bubbles with your <b>hands</b>"],
-    ["🌟", "Reach up high for <b>golden bubbles</b> (3 points!)"],
-    ["⚡", "Pop fast for a <b>combo</b> and double points"],
+    ["✋", "Pop bubbles with your hands"],
+    ["🌟", "Gold bubbles = 3 points"],
+    ["⚡", "Pop fast for combos"],
   ],
   mouse: "hand",
   levels: {

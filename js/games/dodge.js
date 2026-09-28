@@ -8,11 +8,12 @@ export default {
   id: "dodge",
   title: "Dodge & Duck",
   emoji: "🚀",
+  color: "#ff7a59",
   blurb: "Dodge space rocks!",
   how: [
-    ["↔️", "Step side to side to <b>dodge</b> the space rocks ☄️"],
-    ["⬇️", "Squat down low when you see <b>DUCK!</b>"],
-    ["🙌", "Reach up with your hands to <b>catch stars</b> ⭐"],
+    ["↔️", "Dodge the space rocks"],
+    ["⬇️", "Squat when it says DUCK!"],
+    ["🙌", "Grab the stars"],
   ],
   mouse: "head",
   levels: {

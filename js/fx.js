@@ -71,7 +71,7 @@ export function drawEmoji(emoji, x, y, size, angle = 0) {
 }
 
 export function bigText(text, x, y, size, color = "#fff") {
-  ctx.font = `800 ${size}px "Baloo 2", ${EMOJI_FONT}`;
+  ctx.font = `800 ${size}px "Baloo Local", "Baloo 2", "Segoe UI Rounded", ${EMOJI_FONT}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.lineWidth = Math.max(4, size / 7);

@@ -1,12 +1,18 @@
 // Menu, round flow (ready → countdown → play → results), HUD and main loop.
 import { view, setCtx, ctx, sfx, say, setMuted, isMuted, clearEffects, updateEffects, drawEffects, bigText, pick } from "./fx.js";
-import { player, initTracking, updateTracking, updateFromMouse, hasCamera, drawCamera } from "./tracker.js";
+import { player, initTracking, updateTracking, updateFromMouse, hasCamera, drawCamera, setSteadiness, stats } from "./tracker.js";
 import dodge from "./games/dodge.js";
 import bubbles from "./games/bubbles.js";
 import jacks from "./games/jacks.js";
 import simon from "./games/simon.js";
+import fruit from "./games/fruit.js";
+import freeze from "./games/freeze.js";
+import moles from "./games/moles.js";
+import goalie from "./games/goalie.js";
+import balloon from "./games/balloon.js";
+import knees from "./games/knees.js";
 
-const MODES = [dodge, bubbles, jacks, simon];
+const MODES = [fruit, dodge, bubbles, goalie, moles, balloon, freeze, jacks, knees, simon];
 const CHEERS = [
   "You're a super mover! 💪",
   "Wow, what a champion! 🏆",
@@ -18,14 +24,27 @@ const CHEERS = [
 const $ = (id) => document.getElementById(id);
 const canvas = $("stage");
 setCtx(canvas.getContext("2d"));
-const screens = { menu: $("menu"), loading: $("loading"), end: $("end") };
+const screens = { menu: $("menu"), setup: $("setup"), loading: $("loading"), end: $("end") };
 
 let mode = MODES[0];
 let levelName = "easy";
 let game = null;     // the running mini-game
 let session = null;  // shared round state
 let mouseMode = false;
-const mouse = { x: innerWidth / 2, y: innerHeight / 2, down: false };
+let debug = false;     // press D in game to show raw tracker points
+const mouse = { x: innerWidth / 2, y: innerHeight / 2, down: false, leg: 1 };
+
+// Hand steadiness preference (remembered on this device only).
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+};
+function applySteadiness(name) {
+  if (!["steady", "normal", "quick"].includes(name)) name = "normal";
+  setSteadiness(name);
+  store.set("hands", name);
+  document.querySelectorAll("[data-steady]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.steady === name)));
+}
 
 // ---------- Layout ----------
 function resize() {
@@ -47,18 +66,19 @@ function show(name) {
 // ---------- Menu ----------
 function buildMenu() {
   $("gameList").innerHTML = MODES.map((m) =>
-    `<button class="game-tile" data-game="${m.id}"><span>${m.emoji}</span><b>${m.title}</b><small>${m.blurb}</small></button>`
+    `<button class="game-tile" data-game="${m.id}" style="--c:${m.color}"><span>${m.emoji}</span>${m.title}</button>`
   ).join("");
   $("gameList").querySelectorAll(".game-tile").forEach((btn) =>
-    btn.addEventListener("click", () => selectMode(MODES.find((m) => m.id === btn.dataset.game)))
+    btn.addEventListener("click", () => openSetup(MODES.find((m) => m.id === btn.dataset.game)))
   );
-  selectMode(mode);
 }
 
-function selectMode(m) {
+function openSetup(m) {
   mode = m;
-  document.querySelectorAll(".game-tile").forEach((b) => b.classList.toggle("selected", b.dataset.game === m.id));
-  $("gameHow").innerHTML = m.how.map(([e, t]) => `<li><span class="big">${e}</span> ${t}</li>`).join("");
+  $("setupEmoji").textContent = m.emoji;
+  $("setupTitle").textContent = m.title;
+  $("setupHow").innerHTML = m.how.map(([e, t]) => `<div><span>${e}</span>${t}</div>`).join("");
+  show("setup");
 }
 
 // ---------- Round flow ----------
@@ -91,7 +111,7 @@ function showCamError(detail) {
 function endGame() {
   session.phase = "over";
   sfx.fanfare();
-  $("endTitle").textContent = `🎉 ${mode.title} done! 🎉`;
+  $("endTitle").textContent = `🎉 Great ${mode.title}!`;
   $("endScore").textContent = game.score;
   $("endStats").innerHTML = game.results().map((r) =>
     `<div><span>${r.emoji}</span><b>${r.value}</b><small>${r.label}</small></div>`
@@ -144,20 +164,22 @@ function update(dt) {
 }
 
 // ---------- Drawing ----------
-const bgStars = Array.from({ length: 80 }, () => ({ x: Math.random(), y: Math.random(), s: Math.random() * 2 + 0.5 }));
+const bgStars = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random(), s: Math.random() * 2.2 + 0.4, p: Math.random() * 6 }));
 
 function drawBackground(now) {
   const { W, H } = view;
-  if (hasCamera() && !mouseMode) { drawCamera(ctx); return; }
+  if (hasCamera() && !mouseMode && session && session.phase !== "over") { drawCamera(ctx); return; }
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, "#1b1147");
-  g.addColorStop(1, "#3a1f6b");
+  g.addColorStop(0, "#0f0a2a");
+  g.addColorStop(1, "#2a1757");
   ctx.fillStyle = g;
   ctx.fillRect(-20, -20, W + 40, H + 40);
+  // Slowly drifting, twinkling stars.
   ctx.fillStyle = "#fff";
   for (const s of bgStars) {
-    ctx.globalAlpha = 0.4 + 0.4 * Math.sin(now / 600 + s.x * 20);
-    ctx.fillRect(s.x * W, s.y * H, s.s, s.s);
+    const x = ((s.x + now / 400000 * s.s) % 1) * W;
+    ctx.globalAlpha = 0.35 + 0.45 * Math.sin(now / 700 + s.p);
+    ctx.fillRect(x, s.y * H, s.s, s.s);
   }
   ctx.globalAlpha = 1;
 }
@@ -186,10 +208,19 @@ function draw(now) {
       bigText(String(Math.ceil(session.countdown)), W / 2, H / 2, 160 * (1 + (session.countdown % 1) * 0.5), "#ffe066");
     }
 
+    if (debug) drawDebug();
     $("hudScore").textContent = `⭐ ${game.score}`;
     $("hudTime").textContent = `⏱ ${Math.max(0, Math.ceil(session.timeLeft))}`;
   }
   ctx.restore();
+}
+
+function drawDebug() {
+  for (const r of stats.raw) if (r) { ctx.fillStyle = "#ff3355"; ctx.beginPath(); ctx.arc(r.x, r.y, 5, 0, 7); ctx.fill(); }
+  const lines = [`camera ${stats.fps.toFixed(0)} fps`, `tracker ${stats.detectMs.toFixed(0)} ms (${stats.model || "—"})`, "red dots = raw tracker"];
+  ctx.font = "600 16px monospace"; ctx.textAlign = "left"; ctx.textBaseline = "top";
+  ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(10, view.H - 80, 260, 70);
+  ctx.fillStyle = "#fff"; lines.forEach((l, i) => ctx.fillText(l, 18, view.H - 74 + i * 21));
 }
 
 // ---------- Main loop ----------
@@ -210,9 +241,17 @@ document.querySelectorAll(".level[data-level]").forEach((btn) =>
   btn.addEventListener("click", () => { levelName = btn.dataset.level; start(); })
 );
 const toMenu = () => { game = null; session = null; show("menu"); };
+const toSetup = () => { game = null; session = null; show("setup"); };
+$("setupBack").addEventListener("click", toMenu);
 $("againBtn").addEventListener("click", start);
 $("menuBtn").addEventListener("click", toMenu);
-$("backBtn").addEventListener("click", toMenu);
+addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("setup").classList.contains("hidden")) toMenu();
+  if (e.key === "d" || e.key === "D") debug = !debug;
+});
+document.querySelectorAll("[data-steady]").forEach((b) => b.addEventListener("click", () => applySteadiness(b.dataset.steady)));
+applySteadiness(store.get("hands"));
+$("backBtn").addEventListener("click", toSetup);
 $("quitBtn").addEventListener("click", () => { if (session && session.phase !== "over") endGame(); });
 $("mouseModeBtn").addEventListener("click", () => { mouseMode = true; start(); });
 $("muteBtn").addEventListener("click", () => {
@@ -220,7 +259,7 @@ $("muteBtn").addEventListener("click", () => {
   $("muteBtn").textContent = isMuted() ? "🔇" : "🔊";
 });
 addEventListener("pointermove", (e) => { mouse.x = e.clientX; mouse.y = e.clientY; });
-canvas.addEventListener("pointerdown", () => (mouse.down = true));
+canvas.addEventListener("pointerdown", () => { mouse.down = true; mouse.leg = 1 - mouse.leg; });
 addEventListener("pointerup", () => (mouse.down = false));
 
 buildMenu();

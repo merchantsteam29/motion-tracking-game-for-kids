@@ -48,12 +48,13 @@ const POSES = [
 export default {
   id: "simon",
   title: "Simon Says",
-  emoji: "🗣️",
+  emoji: "🙋",
+  color: "#2fcf8a",
   blurb: "Copy the poses!",
   how: [
-    ["👀", "Look at the picture and <b>copy the pose</b>"],
-    ["⏳", "Hold it until the bar fills up"],
-    ["🙊", "Only move if it says <b>Simon says</b>! (Medium & Hard)"],
+    ["👀", "Copy the picture"],
+    ["⏳", "Hold still till the bar fills"],
+    ["🙊", "Only if Simon says!"],
   ],
   mouse: "head", // mouse button = hands up, move mouse low = squat
   levels: {
@@ -150,7 +151,7 @@ class Simon {
     return [
       { emoji: "✅", value: this.matched, label: "poses copied" },
       { emoji: "👂", value: this.listened, label: "tricks spotted" },
-      { emoji: "🗣️", value: this.total, label: "commands" },
+      { emoji: "🙋", value: this.total, label: "commands" },
     ];
   }
 }

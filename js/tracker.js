@@ -1,114 +1,218 @@
 // Camera + body tracking (Google MediaPipe Pose Landmarker, free and runs locally).
 // Produces a `player` object in screen pixels with filtered, stable points.
-import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 import { view } from "./fx.js";
 
-const MP_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
-const MODEL_FULL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task";
-const MODEL_LITE =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+// Prefer the copies bundled with the app (offline); fall back to the CDN for the plain web version.
+const LOCAL = new URL("../vendor/", import.meta.url).href;
+const CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+const MODEL_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmarker";
+const MODELS = {
+  full: { local: `${LOCAL}models/pose_landmarker_full.task`, cdn: `${MODEL_CDN}/pose_landmarker_full/float16/1/pose_landmarker_full.task` },
+  lite: { local: `${LOCAL}models/pose_landmarker_lite.task`, cdn: `${MODEL_CDN}/pose_landmarker_lite/float16/1/pose_landmarker_lite.task` },
+};
 
 // BlazePose landmark indices
 const NOSE = 0, L_SHOULDER = 11, R_SHOULDER = 12, L_WRIST = 15, R_WRIST = 16,
-  L_PINKY = 17, R_PINKY = 18, L_INDEX = 19, R_INDEX = 20, L_HIP = 23, R_HIP = 24;
+  L_PINKY = 17, R_PINKY = 18, L_INDEX = 19, R_INDEX = 20, L_HIP = 23, R_HIP = 24,
+  L_KNEE = 25, R_KNEE = 26, L_ANKLE = 27, R_ANKLE = 28;
 
-// ---------- One Euro filter: smooth when still, responsive when moving fast ----------
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+// ---------- One Euro filter: smooth when still, responsive when moving ----------
 const lpAlpha = (cutoff, dt) => 1 / (1 + 1 / (2 * Math.PI * cutoff) / dt);
 
 class OneEuro {
-  constructor(minCutoff, beta, dCutoff = 1) {
-    Object.assign(this, { minCutoff, beta, dCutoff });
-    this.reset();
-  }
+  constructor() { this.reset(); }
   reset() { this.prev = null; this.dPrev = 0; }
-  filter(v, dt) {
+  filter(v, dt, minCutoff, beta) {
     if (this.prev === null) { this.prev = v; return v; }
     const d = (v - this.prev) / dt;
-    this.dPrev += lpAlpha(this.dCutoff, dt) * (d - this.dPrev);
-    const cutoff = this.minCutoff + this.beta * Math.abs(this.dPrev);
+    this.dPrev += lpAlpha(1, dt) * (d - this.dPrev);
+    const cutoff = minCutoff + beta * Math.abs(this.dPrev);
     this.prev += lpAlpha(cutoff, dt) * (v - this.prev);
     return this.prev;
   }
 }
 
-// A single tracked body point with visibility hysteresis, short hold-on-loss and outlier rejection.
+// Hand smoothing presets (picked on the game setup screen). Units are body-widths, so they
+// work the same whether the child stands near or far. deadband = tiny wiggles are ignored,
+// renderTau = how softly the circle glides between camera frames.
+export const STEADINESS = {
+  steady: { minCutoff: 0.5, beta: 4, deadband: 0.075, renderTau: 0.03 },
+  normal: { minCutoff: 0.5, beta: 7, deadband: 0.065, renderTau: 0.012 },
+  quick:  { minCutoff: 0.5, beta: 14, deadband: 0.05, renderTau: 0.012 },
+};
+let handTuning = STEADINESS.normal;
+export function setSteadiness(name) { handTuning = STEADINESS[name] ?? STEADINESS.normal; }
+
+// A tracked body point: visibility hysteresis, short hold-on-loss, glitch rejection,
+// One Euro smoothing + deadband, then a gentle glide at screen refresh rate.
+// It never predicts ahead, so it can't overshoot or amplify tracker noise.
 class TrackedPoint {
-  constructor({ minCutoff = 1.0, beta = 0.01, acquire = 0.5, lose = 0.3, hold = 0.25, need = 1 } = {}) {
-    Object.assign(this, { acquire, lose, hold, need });
-    this.fx = new OneEuro(minCutoff, beta);
-    this.fy = new OneEuro(minCutoff, beta);
-    this.x = 0; this.y = 0;
-    this.ok = false; this.lost = 0; this.good = 0; this.suspect = 0;
+  constructor({ hand = false, minCutoff = 1.0, beta = 0.6, deadband = 0.015, renderTau = 0.035,
+    acquire = 0.5, lose = 0.3, hold = 0.25, need = 1 } = {}) {
+    Object.assign(this, { hand, own: { minCutoff, beta, deadband, renderTau }, acquire, lose, hold, need });
+    this.fx = new OneEuro();
+    this.fy = new OneEuro();
+    this.x = 0; this.y = 0;     // displayed position
+    this.vx = 0; this.vy = 0;   // displayed velocity (px/s)
+    this.tx = 0; this.ty = 0;   // filtered target
+    this.t = 0;
+    this.ok = false; this.fresh = true; this.lost = 0; this.good = 0; this.suspect = 0;
   }
-  update(m, dt, scale) {
+
+  get tune() { return this.hand ? handTuning : this.own; }
+  predict() { return { x: this.tx, y: this.ty }; }
+
+  // m = {x, y, vis} in px, t = frame time in seconds, scale = body size in px
+  update(m, t, scale) {
+    const dt = clamp(t - this.t, 1 / 240, 0.25);
+    this.t = t;
     const threshold = this.ok ? this.lose : this.acquire;
     if (!m || m.vis < threshold) {
       this.good = 0;
       if (this.ok) { this.lost += dt; if (this.lost > this.hold) this.ok = false; }
+      if (!this.ok) this.fresh = true;
       return;
     }
     if (this.ok) {
       // A sudden huge jump is usually a tracking glitch: ignore it unless it sticks around.
-      if (Math.hypot(m.x - this.x, m.y - this.y) > scale * 2.5 && this.suspect < 2) {
+      if (Math.hypot(m.x - this.tx, m.y - this.ty) > scale * 2.5 && this.suspect < 2) {
         this.suspect++;
         return;
       }
     } else if (++this.good < this.need) {
       return; // need a few good frames before showing the point again
     }
-    if (!this.ok || this.suspect >= 2) { this.fx.reset(); this.fy.reset(); }
+    if (this.fresh || this.suspect >= 2) {
+      this.fx.reset(); this.fy.reset();
+      this.tx = m.x; this.ty = m.y;
+      this.fresh = true;
+    }
     this.suspect = 0;
     this.ok = true;
     this.lost = 0;
-    this.x = this.fx.filter(m.x, dt);
-    this.y = this.fy.filter(m.y, dt);
+
+    const T = this.tune;
+    const fx = this.fx.filter(m.x / scale, dt, T.minCutoff, T.beta) * scale;
+    const fy = this.fy.filter(m.y / scale, dt, T.minCutoff, T.beta) * scale;
+    // Soft deadband: tiny wiggles don't move the target at all.
+    const dx = fx - this.tx, dy = fy - this.ty, d = Math.hypot(dx, dy), db = T.deadband * scale;
+    if (d > db) { const k = (d - db) / d; this.tx += dx * k; this.ty += dy * k; }
   }
-  set(x, y) { this.x = x; this.y = y; this.ok = true; this.lost = 0; }
+
+  // Called every animation frame: glide toward the target so motion is smooth between camera frames.
+  render(now) {
+    if (!this.ok) return;
+    const dt = clamp(now - (this.rt ?? now), 0, 0.1);
+    this.rt = now;
+    if (this.fresh) {
+      this.x = this.tx; this.y = this.ty; this.fresh = false;
+      this.vx = this.vy = 0; this.vt = null;
+    } else {
+      const k = 1 - Math.exp(-dt / this.tune.renderTau);
+      this.x += (this.tx - this.x) * k;
+      this.y += (this.ty - this.y) * k;
+    }
+    this.trackVelocity(now);
+  }
+
+  // Smoothed on-screen speed in px/s (used for bouncing balloons, blocking balls, etc.).
+  trackVelocity(now) {
+    if (this.vt != null && now > this.vt) {
+      const dt = now - this.vt, k = Math.min(1, dt / 0.06);
+      this.vx += ((this.x - this.px) / dt - this.vx) * k;
+      this.vy += ((this.y - this.py) / dt - this.vy) * k;
+    }
+    this.px = this.x; this.py = this.y; this.vt = now;
+  }
+
+  set(x, y) {
+    this.x = this.tx = x; this.y = this.ty = y; this.ok = true; this.lost = 0;
+    this.trackVelocity(performance.now() / 1000);
+  }
   get alpha() { return this.ok ? Math.max(0.35, 1 - this.lost / this.hold) : 0; }
 }
 
-const handOpts = { minCutoff: 1.2, beta: 0.02, acquire: 0.6, lose: 0.25, hold: 0.35, need: 2 };
+const handOpts = { hand: true, acquire: 0.6, lose: 0.25, hold: 0.35, need: 2 };
 
 export const player = {
   visible: false,
   seenFor: 0,
   missingFor: 0,
-  head: new TrackedPoint(),
-  shoulders: [new TrackedPoint(), new TrackedPoint()],
+  head: new TrackedPoint({ minCutoff: 0.8, deadband: 0.012 }),
+  shoulders: [new TrackedPoint({ minCutoff: 0.8, deadband: 0.012 }), new TrackedPoint({ minCutoff: 0.8, deadband: 0.012 })],
   hips: [new TrackedPoint({ acquire: 0.6 }), new TrackedPoint({ acquire: 0.6 })],
+  knees: [new TrackedPoint({ acquire: 0.6 }), new TrackedPoint({ acquire: 0.6 })],
+  ankles: [new TrackedPoint({ acquire: 0.6 }), new TrackedPoint({ acquire: 0.6 })],
   hands: [new TrackedPoint(handOpts), new TrackedPoint(handOpts)],
   scale: 120,   // body size in px (≈ shoulder width)
   baseY: null,  // standing head height, set during countdown
   get cx() { return (this.shoulders[0].x + this.shoulders[1].x) / 2; },
   get shY() { return (this.shoulders[0].y + this.shoulders[1].y) / 2; },
 };
+const allPoints = () => [player.head, ...player.shoulders, ...player.hips, ...player.knees, ...player.ankles, ...player.hands];
 
-// ---------- Camera ----------
+// ---------- Camera + model ----------
 export const video = document.getElementById("cam");
+let vision = null;       // MediaPipe module + fileset
 let landmarker = null;
+let modelName = "full";
 let camReady = false;
 let lastVideoTime = -1;
-let lastDetect = 0;
+let detectMs = 0;        // running average of detection time
+let detectCount = 0;
+let switching = false;
+let lastDetectAt = 0;
+
+// Live numbers for the debug overlay (press D in game).
+export const stats = { fps: 0, detectMs: 0, model: "", raw: [null, null] };
 
 export const hasCamera = () => camReady;
+
+async function exists(url) {
+  try { return (await fetch(url, { method: "HEAD" })).ok; } catch { return false; }
+}
+
+async function loadVision() {
+  const local = await exists(`${LOCAL}tasks-vision/vision_bundle.mjs`);
+  const base = local ? `${LOCAL}tasks-vision` : CDN;
+  const mod = await import(local ? `${base}/vision_bundle.mjs` : base);
+  const fileset = await mod.FilesetResolver.forVisionTasks(`${base}/wasm`);
+  return { mod, fileset };
+}
+
+async function createLandmarker(name, delegate) {
+  const m = MODELS[name];
+  const modelAssetPath = (await exists(m.local)) ? m.local : m.cdn;
+  return vision.mod.PoseLandmarker.createFromOptions(vision.fileset, {
+    baseOptions: { modelAssetPath, delegate },
+    runningMode: "VIDEO",
+    numPoses: 1,
+    minPoseDetectionConfidence: 0.5,
+    minPosePresenceConfidence: 0.5,
+    minTrackingConfidence: 0.5,
+  });
+}
 
 export async function initTracking(onStatus) {
   if (!camReady) {
     onStatus("Waking up the camera…");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        // Smaller frames at a higher frame rate = fresher, smoother tracking.
+        video: { facingMode: "user", width: { ideal: 960 }, height: { ideal: 540 }, frameRate: { ideal: 60 } },
         audio: false,
       });
       video.srcObject = stream;
       await video.play();
       camReady = true;
+      startFrameLoop();
     } catch (err) {
       return {
         ok: false,
         error: err?.name === "NotAllowedError"
-          ? "Camera permission was blocked. Open http://localhost:8080 in Chrome or Edge, then click the camera icon in the address bar and choose Allow."
+          ? "Camera permission was blocked. Click the camera icon in the address bar and choose Allow, then try again."
           : !window.isSecureContext
             ? "Open the game from http://localhost:8080 (run: node server.js). Browsers only allow cameras on secure pages."
             : "No camera was found, or another app is using it.",
@@ -118,20 +222,14 @@ export async function initTracking(onStatus) {
   if (!landmarker) {
     onStatus("Loading body tracker… 🤖");
     try {
-      const vision = await FilesetResolver.forVisionTasks(MP_WASM);
-      const opts = (model, delegate) => ({
-        baseOptions: { modelAssetPath: model, delegate },
-        runningMode: "VIDEO",
-        numPoses: 1,
-        minPoseDetectionConfidence: 0.5,
-        minPosePresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-      });
+      vision ??= await loadVision();
       try {
-        landmarker = await PoseLandmarker.createFromOptions(vision, opts(MODEL_FULL, "GPU"));
+        landmarker = await createLandmarker("full", "GPU");
+        modelName = "full";
       } catch {
         // No GPU: the lite model keeps things fast on the CPU.
-        landmarker = await PoseLandmarker.createFromOptions(vision, opts(MODEL_LITE, "CPU"));
+        landmarker = await createLandmarker("lite", "CPU");
+        modelName = "lite";
       }
     } catch (err) {
       console.error(err);
@@ -139,6 +237,33 @@ export async function initTracking(onStatus) {
     }
   }
   return { ok: true };
+}
+
+// Run detection once per new camera frame (not once per screen refresh).
+function startFrameLoop() {
+  if ("requestVideoFrameCallback" in HTMLVideoElement.prototype) {
+    const onFrame = (now) => { detect(now); video.requestVideoFrameCallback(onFrame); };
+    video.requestVideoFrameCallback(onFrame);
+  } else {
+    const poll = (now) => {
+      if (video.currentTime !== lastVideoTime) { lastVideoTime = video.currentTime; detect(now); }
+      requestAnimationFrame(poll);
+    };
+    requestAnimationFrame(poll);
+  }
+}
+
+// If the accurate model is too slow on this computer, switch to the lighter one.
+async function maybeDowngrade() {
+  if (switching || modelName !== "full" || detectCount < 45 || detectMs < 30) return;
+  switching = true;
+  try {
+    const lite = await createLandmarker("lite", "GPU");
+    landmarker.close();
+    landmarker = lite;
+    modelName = "lite";
+    console.info("Tracker: switched to lite model for speed");
+  } catch { /* keep the full model */ }
 }
 
 // Video is drawn "cover"-fit and mirrored; these map landmarks to screen px.
@@ -156,7 +281,7 @@ export function drawCamera(ctx) {
   ctx.scale(-1, 1);
   ctx.drawImage(video, 0, 0, r.w, r.h);
   ctx.restore();
-  ctx.fillStyle = "rgba(30, 14, 80, 0.35)";
+  ctx.fillStyle = "rgba(20, 12, 60, 0.35)";
   ctx.fillRect(-20, -20, view.W + 40, view.H + 40);
 }
 
@@ -167,68 +292,90 @@ function refreshVisibility(dt) {
   else { player.missingFor += dt; player.seenFor = 0; if (player.missingFor > 0.3) player.visible = false; }
 }
 
+// Called every animation frame.
 export function updateTracking(dt) {
-  if (landmarker && camReady && video.readyState >= 2 && video.currentTime !== lastVideoTime) {
-    lastVideoTime = video.currentTime;
-    detect();
-  }
+  const now = performance.now() / 1000;
+  for (const p of allPoints()) p.render(now);
   refreshVisibility(dt);
 }
 
-function detect() {
-  const now = performance.now();
-  const fdt = Math.min(0.25, Math.max(1 / 120, (now - lastDetect) / 1000));
-  lastDetect = now;
+function detect(nowMs) {
+  if (!landmarker || video.readyState < 2) return;
+  const start = performance.now();
+  let lm;
+  try {
+    lm = landmarker.detectForVideo(video, nowMs).landmarks?.[0];
+  } catch (err) {
+    console.warn(err);
+    return;
+  }
+  const took = performance.now() - start;
+  detectMs = detectCount++ ? detectMs * 0.95 + took * 0.05 : took;
+  if (lastDetectAt) stats.fps = stats.fps * 0.9 + (1000 / Math.max(1, nowMs - lastDetectAt)) * 0.1;
+  lastDetectAt = nowMs;
+  stats.detectMs = detectMs;
+  stats.model = modelName;
+  maybeDowngrade();
 
-  const lm = landmarker.detectForVideo(video, now).landmarks?.[0];
+  const t = nowMs / 1000;
   const r = videoRect();
   const at = (p) => ({ x: r.x + (1 - p.x) * r.w, y: r.y + p.y * r.h, vis: p.visibility ?? 1 });
   const pt = (i) => (lm ? at(lm[i]) : null);
-  // Hand centre ≈ blend of wrist and knuckles (more natural than the bare wrist).
+  // Hand centre ≈ wrist blended toward the knuckles (more natural than the bare wrist).
   const palm = (w, p, i) => {
     if (!lm) return null;
     const a = lm[w], b = lm[p], c = lm[i];
     return at({
-      x: a.x * 0.4 + b.x * 0.3 + c.x * 0.3,
-      y: a.y * 0.4 + b.y * 0.3 + c.y * 0.3,
-      visibility: ((a.visibility ?? 1) + (b.visibility ?? 1) + (c.visibility ?? 1)) / 3,
+      x: a.x * 0.5 + b.x * 0.25 + c.x * 0.25,
+      y: a.y * 0.5 + b.y * 0.25 + c.y * 0.25,
+      visibility: (a.visibility ?? 1) * 0.6 + Math.max(b.visibility ?? 1, c.visibility ?? 1) * 0.4,
     });
   };
 
   const s = player.scale;
-  player.head.update(pt(NOSE), fdt, s);
-  player.shoulders[0].update(pt(L_SHOULDER), fdt, s);
-  player.shoulders[1].update(pt(R_SHOULDER), fdt, s);
-  player.hips[0].update(pt(L_HIP), fdt, s);
-  player.hips[1].update(pt(R_HIP), fdt, s);
+  player.head.update(pt(NOSE), t, s);
+  player.shoulders[0].update(pt(L_SHOULDER), t, s);
+  player.shoulders[1].update(pt(R_SHOULDER), t, s);
+  player.hips[0].update(pt(L_HIP), t, s);
+  player.hips[1].update(pt(R_HIP), t, s);
+  player.knees[0].update(pt(L_KNEE), t, s);
+  player.knees[1].update(pt(R_KNEE), t, s);
+  player.ankles[0].update(pt(L_ANKLE), t, s);
+  player.ankles[1].update(pt(R_ANKLE), t, s);
 
-  // Body scale from shoulder width (or torso length when turned sideways).
+  // Body scale from shoulder width (or torso length when turned sideways), changing slowly.
   const [ls, rs] = player.shoulders;
   if (ls.ok && rs.ok) {
-    let raw = Math.hypot(ls.x - rs.x, ls.y - rs.y);
+    const a = ls.predict(t), b = rs.predict(t);
+    let raw = Math.hypot(a.x - b.x, a.y - b.y);
     const [lh, rh] = player.hips;
-    if (lh.ok && rh.ok) raw = Math.max(raw, 0.75 * Math.hypot(player.cx - (lh.x + rh.x) / 2, player.shY - (lh.y + rh.y) / 2));
+    if (lh.ok && rh.ok) {
+      const c = lh.predict(t), d = rh.predict(t);
+      raw = Math.max(raw, 0.75 * Math.hypot((a.x + b.x - c.x - d.x) / 2, (a.y + b.y - c.y - d.y) / 2));
+    }
     raw = Math.max(50, raw);
-    player.scale = player.visible ? s + (raw - s) * Math.min(1, fdt * 3) : raw;
+    player.scale = player.visible ? s + (raw - s) * 0.05 : raw;
   }
 
   let hA = palm(L_WRIST, L_PINKY, L_INDEX);
   let hB = palm(R_WRIST, R_PINKY, R_INDEX);
   const [t0, t1] = player.hands;
+  const p0 = t0.predict(t), p1 = t1.predict(t);
   const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
   if (hA && hB && d(hA, hB) < s * 0.35) {
     // Both guesses landed on the same hand (the other is hidden): give it to the nearer track only.
     const keep = hA.vis >= hB.vis ? hA : hB;
-    const to0 = t0.ok && (!t1.ok || d(t0, keep) <= d(t1, keep));
+    const to0 = t0.ok && (!t1.ok || d(p0, keep) <= d(p1, keep));
     hA = to0 || !t1.ok ? keep : null;
     hB = hA ? null : keep;
-  } else if (hA && hB && t0.ok && t1.ok && d(t0, hB) + d(t1, hA) < 0.6 * (d(t0, hA) + d(t1, hB))) {
+  } else if (hA && hB && t0.ok && t1.ok && d(p0, hB) + d(p1, hA) < 0.6 * (d(p0, hA) + d(p1, hB))) {
     // Tracker swapped left/right for a frame: keep each circle on its own hand.
     [hA, hB] = [hB, hA];
   }
-  t0.update(hA, fdt, s);
-  t1.update(hB, fdt, s);
+  stats.raw = [hA, hB];
+  t0.update(hA, t, s);
+  t1.update(hB, t, s);
 }
 
 // ---------- Mouse fallback ("head" = mouse moves you, "hand" = mouse is your hand) ----------
@@ -248,5 +395,14 @@ export function updateFromMouse(m, style, dt) {
   const hy = player.head.y, hx = player.head.x;
   player.shoulders[0].set(hx - s / 2, hy + s * 0.7);
   player.shoulders[1].set(hx + s / 2, hy + s * 0.7);
+  const spread = m.down ? 1.0 : 0.25;
+  // Each click lifts the next knee (left, right, left…) for testing High Knees with a mouse.
+  const lift = (i) => (m.down && m.leg === i ? s * 1.0 : 0);
+  player.hips[0].set(hx - s * 0.35, hy + s * 1.9);
+  player.hips[1].set(hx + s * 0.35, hy + s * 1.9);
+  player.knees[0].set(hx - s * spread * 0.7, hy + s * 2.8 - lift(0));
+  player.knees[1].set(hx + s * spread * 0.7, hy + s * 2.8 - lift(1));
+  player.ankles[0].set(hx - s * spread, hy + s * 3.4);
+  player.ankles[1].set(hx + s * spread, hy + s * 3.4);
   refreshVisibility(dt);
 }
