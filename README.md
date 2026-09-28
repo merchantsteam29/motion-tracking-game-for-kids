@@ -16,6 +16,11 @@ Webcam workout games for kids. Easy / Medium / Hard levels for mixed ages. Nothi
 | 🎈 **Balloon Bop** | Tap balloons up and keep them from touching the ground |
 | 🪩 **Freeze Dance** | Dance while the music plays, freeze like a statue when it stops |
 | 🏃 **High Knees Race** | Run in place with high knees (alternate legs) to race an animal to the finish |
+| 🪢 **Jump Rope** | Jump each time the swinging rope reaches your feet; keep the streak going |
+| 🌙 **Moon Squats** | Every squat fuels a rocket: Clouds → Space → the Moon → Mars → Jupiter → the Stars |
+| ⛷️ **Ski Slalom** | Step left and right to ski between the flags and miss the trees |
+| 🧽 **Window Wash** | Wipe the muddy window with big arm circles to reveal the picture |
+| 🥊 **Boxing Pads** | Punch the pads fast as they pop up (slow touches don't count) |
 
 Body tracking uses [MediaPipe Pose Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker) (free, runs in the browser).
 

@@ -1,8 +1,8 @@
 // Service worker: lets the web version open offline and be installed on phones/tablets.
 // Game code: network first (so updates show up), cached copy when offline.
 // Big tracker files, icons and fonts: cached after the first download.
-const VERSION = "move-and-play-v1.4.0";
-const GAMES = ["fruit", "dodge", "bubbles", "goalie", "moles", "balloon", "freeze", "jacks", "knees", "simon"];
+const VERSION = "move-and-play-v1.5.0";
+const GAMES = ["fruit", "dodge", "bubbles", "goalie", "moles", "balloon", "freeze", "jacks", "knees", "simon", "jumprope", "rocket", "ski", "wash", "boxing"];
 const SHELL = [
   "./", "index.html", "share.html", "style.css", "manifest.webmanifest",
   "js/main.js", "js/fx.js", "js/tracker.js", "js/config.js", "js/share.js", "js/settings.js", "js/settings-ui.js", "js/profile.js", "js/progress.js",

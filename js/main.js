@@ -16,8 +16,13 @@ import moles from "./games/moles.js";
 import goalie from "./games/goalie.js";
 import balloon from "./games/balloon.js";
 import knees from "./games/knees.js";
+import jumprope from "./games/jumprope.js";
+import rocket from "./games/rocket.js";
+import ski from "./games/ski.js";
+import wash from "./games/wash.js";
+import boxing from "./games/boxing.js";
 
-const MODES = [fruit, dodge, bubbles, goalie, moles, balloon, freeze, jacks, knees, simon];
+const MODES = [fruit, dodge, bubbles, goalie, moles, boxing, balloon, wash, ski, freeze, jumprope, rocket, jacks, knees, simon];
 const LEVELS = ["easy", "medium", "hard"];
 const LEVEL_NAMES = { easy: "Easy", medium: "Medium", hard: "Hard" };
 const CHEERS = [
@@ -493,6 +498,7 @@ document.addEventListener("click", (e) => { if (e.target.closest("button, a.btn"
 
 // Pointer input: mouse, or one or more fingers in finger mode.
 const trackPointer = (e) => {
+  if (e.pointerType === "mouse") mouse.touch = false; // a touchscreen laptop can switch back to the mouse
   mouse.x = e.clientX; mouse.y = e.clientY;
   if (mouse.pointers.has(e.pointerId)) mouse.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
 };
