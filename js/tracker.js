@@ -10,6 +10,8 @@ const MODEL_CDN = "https://storage.googleapis.com/mediapipe-models/pose_landmark
 const MODELS = {
   full: { local: `${LOCAL}models/pose_landmarker_full.task`, cdn: `${MODEL_CDN}/pose_landmarker_full/float16/1/pose_landmarker_full.task` },
   lite: { local: `${LOCAL}models/pose_landmarker_lite.task`, cdn: `${MODEL_CDN}/pose_landmarker_lite/float16/1/pose_landmarker_lite.task` },
+  hand: { local: `${LOCAL}models/hand_landmarker.task`,
+    cdn: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task" },
 };
 
 // BlazePose landmark indices
@@ -43,9 +45,9 @@ class OneEuro {
 // work the same whether the child stands near or far. deadband = tiny wiggles are ignored,
 // renderTau = how softly the circle glides between camera frames.
 export const STEADINESS = {
-  steady: { minCutoff: 0.5, beta: 4, deadband: 0.075, renderTau: 0.03 },
-  normal: { minCutoff: 0.5, beta: 7, deadband: 0.065, renderTau: 0.012 },
-  quick:  { minCutoff: 0.5, beta: 14, deadband: 0.05, renderTau: 0.012 },
+  steady: { minCutoff: 0.6, beta: 5, deadband: 0.045, renderTau: 0.025 },
+  normal: { minCutoff: 0.8, beta: 9, deadband: 0.03, renderTau: 0.012 },
+  quick:  { minCutoff: 1.2, beta: 16, deadband: 0.018, renderTau: 0.008 },
 };
 // The hand preset comes from Settings; tests can override it with setSteadiness().
 let override = null;
@@ -66,6 +68,8 @@ class TrackedPoint {
     this.tx = 0; this.ty = 0;   // filtered target
     this.t = 0;
     this.ok = false; this.fresh = true; this.lost = 0; this.good = 0; this.suspect = 0;
+    this.jitter = 0;            // how much the raw signal wobbles while the hand is still (px)
+    this.mx = null; this.my = null;
   }
 
   get tune() { return this.hand ? handTuning() : this.own; }
@@ -84,7 +88,7 @@ class TrackedPoint {
     }
     if (this.ok) {
       // A sudden huge jump is usually a tracking glitch: ignore it unless it sticks around.
-      if (Math.hypot(m.x - this.tx, m.y - this.ty) > scale * 2.5 && this.suspect < 2) {
+      if (Math.hypot(m.x - this.tx, m.y - this.ty) > scale * (2.5 + this.lost * 8) && this.suspect < 2) {
         this.suspect++;
         return;
       }
@@ -95,6 +99,7 @@ class TrackedPoint {
       this.fx.reset(); this.fy.reset();
       this.tx = m.x; this.ty = m.y;
       this.fresh = true;
+      this.mx = null;
     }
     this.suspect = 0;
     this.ok = true;
@@ -103,8 +108,17 @@ class TrackedPoint {
     const T = this.tune;
     const fx = this.fx.filter(m.x / scale, dt, T.minCutoff, T.beta) * scale;
     const fy = this.fy.filter(m.y / scale, dt, T.minCutoff, T.beta) * scale;
+    // Measure the signal's wobble while the point is (nearly) still, so a shaky signal
+    // gets a bigger deadband and a clean one stays quick.
+    if (this.mx !== null) {
+      const step = Math.hypot(m.x - this.mx, m.y - this.my);
+      const moving = Math.hypot(fx - this.tx, fy - this.ty) / dt / scale > 1.2; // body-widths per second
+      if (!moving) this.jitter += (step - this.jitter) * 0.1;
+    }
+    this.mx = m.x; this.my = m.y;
     // Soft deadband: tiny wiggles don't move the target at all.
-    const dx = fx - this.tx, dy = fy - this.ty, d = Math.hypot(dx, dy), db = T.deadband * scale;
+    const db = Math.min(scale * 0.1, Math.max(T.deadband * scale, this.jitter * 0.9));
+    const dx = fx - this.tx, dy = fy - this.ty, d = Math.hypot(dx, dy);
     if (d > db) { const k = (d - db) / d; this.tx += dx * k; this.ty += dy * k; }
   }
 
@@ -171,9 +185,20 @@ let detectMs = 0;        // running average of detection time
 let detectCount = 0;
 let switching = false;
 let lastDetectAt = 0;
+let handLandmarker = null;  // precise hand finder, run on a zoomed-in crop around each hand
+let handMs = 0;             // running average time per hand crop
+let handTurn = 0;           // which hand to refine next
+let handFrame = 0;          // frame counter for spacing out hand refinement on slower computers
+let frameGapMs = 33;        // time between camera frames, from the camera's own frame rate
+const CROP = 224;
+const crop = document.createElement("canvas");
+crop.width = crop.height = CROP;
+const cropCtx = crop.getContext("2d");
+// Per hand: offset from the rough body-tracker hand to the precise hand-tracker hand.
+const handFix = [{ dx: 0, dy: 0, seen: false, miss: 0 }, { dx: 0, dy: 0, seen: false, miss: 0 }];
 
 // Live numbers for the debug overlay (press D in game).
-export const stats = { fps: 0, detectMs: 0, model: "", raw: [null, null] };
+export const stats = { fps: 0, detectMs: 0, model: "", raw: [null, null], handMs: 0, precise: [false, false], handFix };
 
 let frameLoopStarted = false;
 
@@ -224,6 +249,16 @@ async function modelOptions(name) {
   return modelCache[name];
 }
 
+async function createHandLandmarker(delegate) {
+  return vision.mod.HandLandmarker.createFromOptions(vision.fileset, {
+    baseOptions: { ...(await modelOptions("hand")), delegate },
+    runningMode: "IMAGE",
+    numHands: 2,
+    minHandDetectionConfidence: 0.4,
+    minHandPresenceConfidence: 0.4,
+  });
+}
+
 async function createLandmarker(name, delegate) {
   return vision.mod.PoseLandmarker.createFromOptions(vision.fileset, {
     baseOptions: { ...(await modelOptions(name)), delegate },
@@ -254,6 +289,10 @@ export async function initTracking(onStatus) {
       }
       video.srcObject = stream;
       await video.play();
+      // Budget tracking work against the camera's real frame rate (not how fast we happen to keep up,
+      // which would make a slow computer take on even more work).
+      const fps = stream.getVideoTracks()[0]?.getSettings?.().frameRate;
+      frameGapMs = fps > 0 ? 1000 / fps : 33;
       camReady = true;
       startFrameLoop();
     } catch (err) {
@@ -282,6 +321,14 @@ export async function initTracking(onStatus) {
     } catch (err) {
       console.error(err);
       return { ok: false, error: "The body tracker couldn't load. Check your internet connection and try again." };
+    }
+  }
+  if (!handLandmarker) {
+    onStatus("Loading hand tracker… ✋");
+    try {
+      handLandmarker = await createHandLandmarker("GPU");
+    } catch {
+      try { handLandmarker = await createHandLandmarker("CPU"); } catch (err) { console.warn("Hand tracker unavailable", err); }
     }
   }
   return { ok: true };
@@ -348,6 +395,68 @@ export function updateTracking(dt) {
   refreshVisibility(dt);
 }
 
+// Zoom in on each rough hand spot and let the hand tracker find the real hand.
+// The difference is remembered, so frames where the hand tracker misses stay put instead of jumping.
+function refineHands(rough, lm) {
+  if (!handLandmarker) { stats.precise = [false, false]; return; }
+  const vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
+  const sl = lm[L_SHOULDER], sr = lm[R_SHOULDER];
+  const shoulderPx = Math.hypot((sl.x - sr.x) * vw, (sl.y - sr.y) * vh) || vw * 0.2;
+  const size = clamp(shoulderPx * 2.5, 112, Math.min(vw, vh)); // tested: finds the hand even when the rough guess is well off
+  // Use the time left over between camera frames: fast computers refine both hands every frame,
+  // slower ones one hand every few frames. (The correction is remembered, so circles stay accurate.)
+  const spare = Math.max(4, frameGapMs - detectMs - 4);
+  const every = Math.max(1, Math.min(8, Math.ceil(handMs / spare)));
+  const which = handMs * 2 <= spare ? [0, 1] : handFrame++ % every === 0 ? [handTurn++ % 2] : [];
+  rough.forEach((p, i) => {
+    const fix = handFix[i];
+    fix.now = null;
+    if (!p || p.visibility < 0.3) {
+      // Hand hidden: after a while, forget the old correction.
+      if (++fix.miss > 8) { fix.dx *= 0.85; fix.dy *= 0.85; fix.seen = false; }
+      stats.precise[i] = false;
+      return;
+    }
+    if (!which.includes(i)) return; // skipped this frame to save time; keep the last correction
+    const sx = clamp(p.x * vw - size / 2, 0, vw - size), sy = clamp(p.y * vh - size / 2, 0, vh - size);
+    const started = performance.now();
+    cropCtx.drawImage(video, sx, sy, size, size, 0, 0, CROP, CROP);
+    let res = null;
+    try { res = handLandmarker.detect(crop); } catch { res = null; }
+    handMs = handMs * 0.9 + (performance.now() - started) * 0.1;
+    stats.handMs = handMs;
+    // Of the hands found in the crop, take the one nearest the rough spot.
+    const found = pickHand(res, (p.x * vw - sx) / size, (p.y * vh - sy) / size, 0.5);
+    if (found) {
+      const nx = (sx + found.x * size) / vw, ny = (sy + found.y * size) / vh;
+      const k = fix.seen ? 0.35 : 1; // first sighting snaps; after that blend gently so it doesn't twitch
+      fix.dx += (nx - p.x - fix.dx) * k;
+      fix.dy += (ny - p.y - fix.dy) * k;
+      fix.seen = true;
+      fix.miss = 0;
+      fix.now = { x: nx, y: ny }; // exact spot this frame
+      p.visibility = Math.max(p.visibility, 0.9); // the hand tracker is sure it's there
+    } else if (++fix.miss > 3) {
+      // The hand tracker keeps missing: ease back to the body tracker's guess.
+      fix.dx *= 0.85; fix.dy *= 0.85;
+      fix.seen = false;
+    }
+    stats.precise[i] = fix.seen && fix.miss === 0;
+  });
+}
+
+// Palm centre (wrist + four knuckles) of the detected hand closest to (cx, cy), in crop coords.
+export function pickHand(res, cx, cy, maxDist = 0.45) {
+  let best = null, bestD = maxDist;
+  for (const h of res?.landmarks ?? []) {
+    const c = [0, 5, 9, 13, 17].reduce((acc, k) => ({ x: acc.x + h[k].x / 5, y: acc.y + h[k].y / 5 }), { x: 0, y: 0 });
+    const dd = Math.hypot(c.x - cx, c.y - cy);
+    if (dd < bestD) { bestD = dd; best = c; }
+  }
+  return best;
+}
+
 function detect(nowMs) {
   if (!landmarker || video.readyState < 2) return;
   const start = performance.now();
@@ -371,15 +480,15 @@ function detect(nowMs) {
   const mx = settings.mirror ? (x) => 1 - x : (x) => x;
   const at = (p) => ({ x: r.x + mx(p.x) * r.w, y: r.y + p.y * r.h, vis: p.visibility ?? 1 });
   const pt = (i) => (lm ? at(lm[i]) : null);
-  // Hand centre ≈ wrist blended toward the knuckles (more natural than the bare wrist).
-  const palm = (w, p, i) => {
+  // Rough hand centre from the body tracker: wrist blended toward the knuckles (normalized video coords).
+  const palmN = (w, p, i) => {
     if (!lm) return null;
     const a = lm[w], b = lm[p], c = lm[i];
-    return at({
+    return {
       x: a.x * 0.5 + b.x * 0.25 + c.x * 0.25,
       y: a.y * 0.5 + b.y * 0.25 + c.y * 0.25,
       visibility: (a.visibility ?? 1) * 0.6 + Math.max(b.visibility ?? 1, c.visibility ?? 1) * 0.4,
-    });
+    };
   };
 
   const s = player.scale;
@@ -407,21 +516,28 @@ function detect(nowMs) {
     player.scale = player.visible ? s + (raw - s) * 0.05 : raw;
   }
 
-  let hA = palm(L_WRIST, L_PINKY, L_INDEX);
-  let hB = palm(R_WRIST, R_PINKY, R_INDEX);
+  // Hands: start from the body tracker, then zoom in with the hand tracker for the exact spot.
+  const rough = [palmN(L_WRIST, L_PINKY, L_INDEX), palmN(R_WRIST, R_PINKY, R_INDEX)];
+  if (lm) refineHands(rough, lm);
+  // Use the hand tracker's exact spot when it ran this frame; otherwise the rough spot plus the last correction.
+  const fixed = rough.map((p, i) => {
+    if (!p) return null;
+    const f = handFix[i];
+    return f.now ? { x: f.now.x, y: f.now.y, visibility: p.visibility } : { x: p.x + f.dx, y: p.y + f.dy, visibility: p.visibility };
+  });
+  let hA = fixed[0] ? at(fixed[0]) : null;
+  let hB = fixed[1] ? at(fixed[1]) : null;
   const [t0, t1] = player.hands;
   const p0 = t0.predict(t), p1 = t1.predict(t);
   const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
-  if (hA && hB && d(hA, hB) < s * 0.35) {
-    // Both guesses landed on the same hand (the other is hidden): give it to the nearer track only.
+  // If both guesses sit on the same spot and one of them is unsure, that hand is hidden:
+  // keep only the confident one (on whichever circle is closer). Real claps keep both.
+  if (hA && hB && d(hA, hB) < s * 0.3 && Math.min(hA.vis, hB.vis) < 0.5) {
     const keep = hA.vis >= hB.vis ? hA : hB;
     const to0 = t0.ok && (!t1.ok || d(p0, keep) <= d(p1, keep));
     hA = to0 || !t1.ok ? keep : null;
     hB = hA ? null : keep;
-  } else if (hA && hB && t0.ok && t1.ok && d(p0, hB) + d(p1, hA) < 0.6 * (d(p0, hA) + d(p1, hB))) {
-    // Tracker swapped left/right for a frame: keep each circle on its own hand.
-    [hA, hB] = [hB, hA];
   }
   stats.raw = [hA, hB];
   t0.update(hA, t, s);

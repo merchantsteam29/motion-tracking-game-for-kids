@@ -32,8 +32,8 @@ npm install
 npm run dist
 ```
 
-- `dist/Move-and-Play-Setup-1.2.0.exe`: installer with Start menu and desktop shortcuts
-- `dist/Move-and-Play-Portable-1.2.0.exe`: runs without installing (good for a USB stick)
+- `dist/Move-and-Play-Setup-1.6.0.exe`: installer with Start menu and desktop shortcuts
+- `dist/Move-and-Play-Portable-1.6.0.exe`: runs without installing (good for a USB stick)
 
 The app works fully offline (tracker, AI models and font are bundled). Press **F11** for fullscreen.
 The .exe isn't code-signed, so Windows SmartScreen may say "Windows protected your PC": click **More info → Run anyway**.
@@ -71,7 +71,9 @@ Pause any time with ⏸ (or **P** / **Esc**); switching apps pauses automaticall
 
 ### Code layout
 - `js/main.js` – menu, round flow (ready → countdown → play → results), HUD
-- `js/tracker.js` – camera + pose tracking; One Euro filter + deadband + glide for steady hands (3 presets)
+- `js/tracker.js` – camera + body tracking; each hand is found roughly by the body tracker, then precisely by
+  the MediaPipe Hand Landmarker on a zoomed-in crop (budgeted to the camera frame rate); One Euro filter with an
+  adaptive deadband keeps circles steady
 - `electron/` – Windows app wrapper and icon; `scripts/` – offline file prep and icon generator
 - `js/fx.js` – drawing, sounds, voice, particles
 - `js/settings.js` / `js/settings-ui.js` – saved settings and the Settings screen

@@ -422,10 +422,16 @@ function drawCountdown() {
 
 function drawDebug() {
   for (const r of stats.raw) if (r) { ctx.fillStyle = "#ff3355"; ctx.beginPath(); ctx.arc(r.x, r.y, 5, 0, 7); ctx.fill(); }
-  const lines = [`camera ${stats.fps.toFixed(0)} fps`, `tracker ${stats.detectMs.toFixed(0)} ms (${stats.model || "—"})`, "red dots = raw tracker"];
+  const precise = (stats.precise || []).map((p) => (p ? "✓" : "·")).join(" ");
+  const lines = [
+    `camera ${stats.fps.toFixed(0)} fps`,
+    `body tracker ${stats.detectMs.toFixed(0)} ms (${stats.model || "—"})`,
+    `hand tracker ${stats.handMs ? stats.handMs.toFixed(0) + " ms" : "off"}  exact: ${precise}`,
+    "red dots = what the camera sees",
+  ];
   ctx.font = "600 16px monospace"; ctx.textAlign = "left"; ctx.textBaseline = "top";
-  ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(10, view.H - 80, 260, 70);
-  ctx.fillStyle = "#fff"; lines.forEach((l, i) => ctx.fillText(l, 18, view.H - 74 + i * 21));
+  ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(10, view.H - 102, 330, 92);
+  ctx.fillStyle = "#fff"; lines.forEach((l, i) => ctx.fillText(l, 18, view.H - 96 + i * 21));
 }
 
 // ---------- Main loop ----------

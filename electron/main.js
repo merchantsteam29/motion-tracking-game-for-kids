@@ -55,7 +55,10 @@ function smokeTest(win) {
       const lm = await mod.PoseLandmarker.createFromOptions(fs, {
         baseOptions: { modelAssetPath: "./vendor/models/pose_landmarker_full.task", delegate: "CPU" }, runningMode: "IMAGE" });
       lm.close();
-      return { tiles: document.querySelectorAll(".game-tile").length, tracker: "loaded", font: document.fonts.check("800 20px 'Baloo Local'") };
+      const hand = await mod.HandLandmarker.createFromOptions(fs, {
+        baseOptions: { modelAssetPath: "./vendor/models/hand_landmarker.task", delegate: "CPU" }, runningMode: "IMAGE" });
+      hand.close();
+      return { tiles: document.querySelectorAll(".game-tile").length, tracker: "loaded", handTracker: "loaded", font: document.fonts.check("800 20px 'Baloo Local'") };
     })()`).catch((e) => ({ error: String(e) }));
     console.log("SMOKE_RESULT " + JSON.stringify(result));
     const img = await win.webContents.capturePage();

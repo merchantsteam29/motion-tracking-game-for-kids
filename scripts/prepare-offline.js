@@ -1,4 +1,4 @@
-// Copies the body tracker, AI models and font into vendor/ so the game works offline
+// Copies the body + hand trackers, AI models and font into vendor/ so the game works offline
 // (used by the Windows app, and by the web version when available).
 const fs = require("fs");
 const path = require("path");
@@ -13,6 +13,8 @@ const MODELS = {
     "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task",
   "pose_landmarker_lite.task":
     "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+  "hand_landmarker.task":
+    "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
 };
 
 function copy(from, to) {
