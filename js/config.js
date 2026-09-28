@@ -1,5 +1,5 @@
 // Where the game lives online. Change this if your GitHub name is different.
-export const SITE_URL = "https://merchantsteam29.github.io/motion-tracking-game/";
+export const SITE_URL = "https://merchantsteam29.github.io/motion-tracking-game-for-kids/";
 
 // When the page is already online, use its real address so shared links always match.
 export function siteUrl() {

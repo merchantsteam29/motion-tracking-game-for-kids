@@ -35,7 +35,7 @@ The .exe isn't code-signed, so Windows SmartScreen may say "Windows protected yo
 
 ### Browser version (phones, tablets, computers)
 The website is published automatically to GitHub Pages by `.github/workflows/pages.yml` whenever `main` is pushed:
-**https://merchantsteam29.github.io/motion-tracking-game/**
+**https://merchantsteam29.github.io/motion-tracking-game-for-kids/**
 
 - Works on iPhone/iPad (Safari), Android (Chrome), and any computer with Chrome, Edge or Safari
 - Can be installed like an app (Add to Home Screen / Install app) and opens offline after the first visit
